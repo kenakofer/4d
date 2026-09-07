@@ -715,6 +715,85 @@ console.log('\nmaze: what the slice panels must show');
   }
   ok('joined says no to two cells with a wall between them', sawWall);
 
+  // --- junctions on the panel ---------------------------------------------
+  //
+  // A cell where three or four passages meet has to be drawn as one shape with
+  // three or four arms. The panel builds it per cell -- each cell reaching
+  // toward every neighbour it is linked to -- so a junction is not a special
+  // case in the drawing code, but it is the case most likely to be wrong: a
+  // corridor still looks right if reaching only works one way along an axis,
+  // and a T does not.
+  //
+  // This replays that geometry: reach by the inset toward each linked
+  // neighbour, then check that linked cells' rectangles actually meet and
+  // unlinked ones do not.
+  {
+    const CELL = 30, INSET = CELL * 0.16;
+    const px = (h) => h * CELL;
+    const py = (v, flip, ny) => (flip ? v : ny - 1 - v) * CELL;
+
+    const meet = (a, b) => a.x0 < b.x1 + 0.01 && b.x0 < a.x1 + 0.01 &&
+                           a.y0 < b.y1 + 0.01 && b.y0 < a.y1 + 0.01;
+
+    let linked = 0, linkedMeet = 0, apart = 0, apartMeet = 0;
+    let threeWay = 0, fourWay = 0;
+    // Enough slices to be sure of meeting a four-way crossing. They are rare --
+    // a cell needs four passages AND all four in the one plane -- so a small
+    // sample finds three-ways and misses crossings entirely, which would leave
+    // the hardest case silently unchecked.
+    for (let sd = 0; sd < 25; sd++) {
+      const m = generate({ seed: sd }).maze;
+      const jn = (a, b) => m.neighbours(key(a)).includes(key(b));
+      for (const start of m.cells.slice(0, 40)) {
+        const f = start.split(',').map(Number);
+        for (const [H, V, flip] of [[0, 2, true], [3, 1, false]]) {
+          const ny = DEFAULTS.dims[V];
+          const inSlice = (q) => q.every((c, i) => (i === H || i === V) || c === f[i]);
+          const cells = m.cells.map((k) => k.split(',').map(Number)).filter(inSlice);
+          const rf = (p) => {
+            let x0 = px(p[H]) + INSET, y0 = py(p[V], flip, ny) + INSET;
+            let x1 = px(p[H]) + CELL - INSET, y1 = py(p[V], flip, ny) + CELL - INSET;
+            let arms = 0;
+            for (const [dh, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const q = p.slice();
+              q[H] += dh; q[V] += dv;
+              if (!inSlice(q) || !m.has(key(q)) || !jn(p, q)) continue;
+              arms++;
+              if (dh === 1) x1 += INSET;
+              else if (dh === -1) x0 -= INSET;
+              else if (py(q[V], flip, ny) < py(p[V], flip, ny)) y0 -= INSET;
+              else y1 += INSET;
+            }
+            return { x0, y0, x1, y1, arms };
+          };
+          for (const a of cells) {
+            const ra = rf(a);
+            if (ra.arms === 3) threeWay++;
+            if (ra.arms === 4) fourWay++;
+            for (const [dh, dv] of [[1, 0], [0, 1]]) {
+              const b = a.slice();
+              b[H] += dh; b[V] += dv;
+              if (!inSlice(b) || !m.has(key(b))) continue;
+              const rb = rf(b);
+              if (jn(a, b)) { linked++; if (meet(ra, rb)) linkedMeet++; }
+              else { apart++; if (meet(ra, rb)) apartMeet++; }
+            }
+          }
+        }
+      }
+    }
+    ok('every linked pair is drawn meeting', linked === linkedMeet,
+       `${linkedMeet} of ${linked}`);
+    ok('no unlinked pair is drawn meeting', apartMeet === 0,
+       `${apartMeet} of ${apart} wrongly met`);
+    // The junction cases have to actually occur, or the two checks above are
+    // only testing corridors.
+    ok('three-way junctions occur on a panel and were checked', threeWay > 0,
+       `${threeWay} found`);
+    ok('four-way crossings occur on a panel and were checked', fourWay > 0,
+       `${fourWay} found`);
+  }
+
   // The colour ramp is what broke the first attempt: it gives neighbours
   // different shades, so any drawing that merges cells BY COLOUR draws a maze
   // of separate dots. Nothing may depend on two linked cells matching.
