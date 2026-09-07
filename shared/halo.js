@@ -110,6 +110,25 @@ export function overshoot(jointR) {
   return 0.8 * jointR * (1 + HALO);
 }
 
+// The shell's own cylinder: OPEN ENDED, unlike the rope's.
+//
+// This is the last piece of the straight-run problem, and the one that actually
+// finished it. A shell overshoots its segment so that consecutive shells
+// overlap and their seam disappears -- but three.js closes a cylinder with end
+// caps, and the overshoot carries a cap out past the seam into the middle of
+// the neighbouring segment. Rendered back faces, that cap faces the camera and
+// sits proud of the neighbour's own surface, so it paints the dark ring the
+// overlap was supposed to prevent. The band moved; it did not go.
+//
+// A shell has no need of caps. It is a sleeve around a tube, and what closes it
+// at a free end is the joint's shell, which is a ball. So the tube is built
+// open and there is nothing left to paint a ring with. `openEnded` is the third
+// positional flag after the height segments, which is why this is a function
+// rather than each game passing six arguments it would have to get right.
+export function shellGeometry(r, radial = 12) {
+  return new THREE.CylinderGeometry(r, r, 1, radial, 1, true);
+}
+
 // Every halo draws before every rope, and both draw after the scenery. A rope's
 // own halo has to sit under the rope, and one strand's halo has to sit under
 // ANOTHER strand -- so the whole halo layer goes down first and the whole rope

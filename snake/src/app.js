@@ -20,7 +20,7 @@ import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
-import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { Arrows } from '../../shared/warrow.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
@@ -612,6 +612,8 @@ function redraw() {
   // leaves a bite out of the bend; larger is a bead on a string.
   const JOINT = TUBE * Math.SQRT2;
   const segGeo = new THREE.CylinderGeometry(TUBE, TUBE, 1, 12);
+  // Open ended -- see shellGeometry(); a cap here bands every straight run.
+  const shellGeo = shellGeometry(TUBE, 12);
   const jointGeo = new THREE.SphereGeometry(JOINT, 14, 12);
   const up = new THREE.Vector3(0, 1, 0);
 
@@ -676,7 +678,7 @@ function redraw() {
       add(m);
       // Fatter across the tube and longer along it -- see overshoot() in
       // halo.js.
-      const h = new THREE.Mesh(segGeo, haloMaterial(fs));
+      const h = new THREE.Mesh(shellGeo, haloMaterial(fs));
       h.position.copy(m.position);
       h.scale.set(fatten(TUBE), len + 2 * overshoot(JOINT), fatten(TUBE));
       h.quaternion.copy(rot);

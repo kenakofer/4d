@@ -33,7 +33,7 @@ import { SlicePanels } from '../../shared/slicepanels.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
-import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { Arrows } from '../../shared/warrow.js';
 import { key, step } from '../../shared/grid.js';
 import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
@@ -333,7 +333,9 @@ function rebuildRope() {
   const up = new THREE.Vector3(0, 1, 0);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const va = new THREE.Vector3(), vb = new THREE.Vector3(), mid = new THREE.Vector3();
-  segHalo = new THREE.InstancedMesh(segGeo, haloMaterial(), flat.length);
+  // Open ended -- see shellGeometry(); a cap here bands every straight run.
+  segHalo = new THREE.InstancedMesh(
+    shellGeometry(TUBE, 10), haloMaterial(), flat.length);
   segHalo.renderOrder = HALO_ORDER;
   segMesh.renderOrder = ROPE_ORDER;
   flat.forEach(([a, b], i) => {

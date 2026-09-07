@@ -9,7 +9,7 @@ import { Minimap, rockAt } from './minimap.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { dropConfetti } from '../../shared/confetti.js';
-import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { Arrows } from '../../shared/warrow.js';
 
 let scene, camera, renderer, raycaster, orbit;
@@ -409,6 +409,8 @@ function rebuildRope() {
   // string. This is the one radius that sits flush.
   const JOINT = TUBE * Math.SQRT2;
   const segGeo = new THREE.CylinderGeometry(TUBE, TUBE, 1, 12);
+  // Open ended -- see shellGeometry(); a cap here bands every straight run.
+  const shellGeo = shellGeometry(TUBE, 12);
   const jointGeo = new THREE.SphereGeometry(JOINT, 14, 12);
   const up = new THREE.Vector3(0, 1, 0);
 
@@ -485,7 +487,7 @@ function rebuildRope() {
 
       // Fatter across the tube, and LONGER along it -- see overshoot() for why
       // shells that merely met end to end banded every straight run.
-      const sh = new THREE.Mesh(segGeo, haloMaterial(fs));
+      const sh = new THREE.Mesh(shellGeo, haloMaterial(fs));
       sh.position.copy(mid);
       sh.scale.set(fatten(TUBE), len + 2 * overshoot(JOINT), fatten(TUBE));
       sh.quaternion.copy(q);
