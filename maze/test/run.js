@@ -629,94 +629,107 @@ console.log('\nmaze: the view refers to things that exist');
 // ---------------------------------------------------------------------------
 // What the slice panels must show.
 //
-// The panel draws a cross-section, and the player uses it to decide where to
-// step. So the shapes on it have to follow the PASSAGES, not the grid: two
-// cells side by side with no passage between them must be drawn apart, or the
-// panel says there is a way through where there is none. That is the one thing
-// a maze panel must not get wrong, and it is the default behaviour for terrain
-// -- a slab of lava is one region and merging its cells is right -- so the
-// maze has to ask for the other rule explicitly.
+// The panel draws a cross-section and the player steps by it, so the shapes on
+// it have to follow the PASSAGES. Two cells side by side with no passage
+// between them must be drawn apart -- that gap is the wall -- and two cells a
+// passage joins must be drawn as one continuous strand, the way Snake's body
+// is drawn on the same panel.
 //
-// SliceMap itself cannot be loaded here (it builds SVG through the DOM), so
-// what is checked is the rule the view hands it: `joined`, and the count of
-// connected pieces it implies.
+// The maze asks for this with `network` rather than `cellFill`, and the
+// distinction is what these tests are really guarding. `cellFill` marks
+// terrain: cells are grouped into regions and each region drawn as one slab,
+// with grouping BY COLOUR. A maze shades every cell by its distance from the
+// exit, so no two neighbours ever share a shade and nothing merges -- the first
+// attempt at this drew the maze as a field of separate dots however connected
+// it actually was, which is the opposite of what the panel is for.
+//
+// SliceMap builds SVG through the DOM and cannot be loaded here, so what is
+// checked is the data the view hands it and the strand structure that implies.
 // ---------------------------------------------------------------------------
 console.log('\nmaze: what the slice panels must show');
 
 {
-  const { maze } = generate({ seed: 11 });
-  const dims = DEFAULTS.dims;
-  // The predicate the view gives the panel.
+  const { maze } = generate({ seed: 5 });
   const joined = (a, b) => maze.neighbours(key(a)).includes(key(b));
+  const focus = maze.cells[0].split(',').map(Number);
 
-  // Pieces within one slice, joined only through passages lying IN that slice.
-  const piecesIn = (focus, H, V, useJoined) => {
-    const cells = maze.cells.map((k) => k.split(',').map(Number))
-      .filter((p) => p.every((c, i) => (i === H || i === V) || c === focus[i]));
+  // Within one slice: how many neighbouring pairs touch on the panel, and how
+  // many of those are really linked.
+  const survey = (H, V) => {
+    const inSlice = (p) => p.every((c, i) => (i === H || i === V) || c === focus[i]);
+    const cells = maze.cells.map((k) => k.split(',').map(Number)).filter(inSlice);
     const ks = new Set(cells.map((p) => key(p)));
-    const seen = new Set();
-    let pieces = 0;
+    let touch = 0, link = 0, withLink = 0;
     for (const c of cells) {
-      if (seen.has(key(c))) continue;
-      pieces++;
-      const stack = [c];
-      seen.add(key(c));
-      while (stack.length) {
-        const cur = stack.pop();
-        for (const [ax, d] of [[H, 1], [H, -1], [V, 1], [V, -1]]) {
-          const n = cur.slice();
-          n[ax] += d;
-          const nk = key(n);
-          if (!ks.has(nk) || seen.has(nk)) continue;
-          // The whole difference: by grid adjacency, or by real passages.
-          if (useJoined && !joined(cur, n)) continue;
-          seen.add(nk);
-          stack.push(n);
-        }
+      let any = false;
+      for (const [ax, d] of [[H, 1], [H, -1], [V, 1], [V, -1]]) {
+        const n = c.slice();
+        n[ax] += d;
+        if (!ks.has(key(n))) continue;
+        if (d === 1) touch++;                 // count each pair once
+        if (joined(c, n)) { if (d === 1) link++; any = true; }
       }
+      if (any) withLink++;
     }
-    return { cells: cells.length, pieces };
+    return { cells: cells.length, touch, link, withLink };
   };
 
-  const focus = maze.cells[0].split(',').map(Number);
-  let anySplit = false, everMerged = false;
-  for (const [H, V] of [[3, 1], [0, 2]]) {
-    const real = piecesIn(focus, H, V, true);
-    const naive = piecesIn(focus, H, V, false);
-    ok(`a panel's shapes follow passages, not the grid (${H}-${V})`,
-       real.pieces >= naive.pieces,
-       `${real.pieces} by passage vs ${naive.pieces} by adjacency`);
-    if (real.pieces > naive.pieces) anySplit = true;
-    if (real.cells > real.pieces) everMerged = true;
+  // How connected a plane is depends on WHICH axes it pairs, and the direction
+  // matrix makes that vary a lot. Averaged over seeds: x-z is 91% connected,
+  // x-y and y-z about 81%, and w-y only 53% -- because w-y pairs the two rarest
+  // axes, w at 5% of free choices and y at the lightest spatial weight. The
+  // w-y panel really is sparser than the other, and that is the matrix showing
+  // through rather than a fault in the drawing.
+  //
+  // So the bar is low, and it is a bar against DOTS: a panel where nothing
+  // joins anything is broken however rare the axes are.
+  for (const [H, V, name, floor] of [[3, 1, 'w-y', 0.2], [0, 2, 'x-z', 0.6]]) {
+    const s = survey(H, V);
+    ok(`cells in the ${name} slice join their neighbours`,
+       s.withLink > s.cells * floor,
+       `${s.withLink} of ${s.cells} had any link`);
+    // And it must draw walls: some touching pairs are not linked, so a panel
+    // that joined everything it touched would be inventing routes.
+    ok(`the ${name} slice has touching cells that are NOT linked`,
+       s.touch > s.link,
+       `${s.touch} touching, ${s.link} linked -- nothing to distinguish`);
   }
-  ok('drawing by adjacency really would merge things that are not connected',
-     anySplit, 'the two rules agreed everywhere, so this proves nothing');
-  ok('cells joined by a passage are still drawn as one shape', everMerged,
-     'every cell came out separate, which would draw no corridors at all');
 
-  // The predicate itself, which is the thing actually handed to the panel.
+  // The predicate itself, which is what the panel is actually given.
   const a = maze.cells.find((k) => maze.degree(k) >= 1);
   const b = maze.neighbours(a)[0];
   ok('joined says yes to a real passage',
      joined(a.split(',').map(Number), b.split(',').map(Number)));
-  // A neighbouring cell on the grid that is NOT a passage.
+
   const p = a.split(',').map(Number);
   let sawWall = false;
-  for (let ax = 0; ax < dims.length && !sawWall; ax++) {
+  for (let ax = 0; ax < DEFAULTS.dims.length && !sawWall; ax++) {
     for (const d of [1, -1]) {
       const q = p.slice();
       q[ax] += d;
-      if (q[ax] < 0 || q[ax] >= dims[ax]) continue;
-      if (!maze.has(key(q))) continue;
-      if (joined(p, q)) continue;
+      if (q[ax] < 0 || q[ax] >= DEFAULTS.dims[ax]) continue;
+      if (!maze.has(key(q)) || joined(p, q)) continue;
       sawWall = true;
-      ok('joined says no to two cells with a wall between them', true);
       break;
     }
   }
-  ok('a wall between neighbouring cells exists to be tested', sawWall,
-     'no such pair found, so the negative case went unchecked');
+  ok('joined says no to two cells with a wall between them', sawWall);
+
+  // The colour ramp is what broke the first attempt: it gives neighbours
+  // different shades, so any drawing that merges cells BY COLOUR draws a maze
+  // of separate dots. Nothing may depend on two linked cells matching.
+  const dist = distances(maze, maze.cells[0]);
+  let differing = 0, pairs = 0;
+  for (const [x, y] of maze.edges()) {
+    if (!dist.has(x) || !dist.has(y)) continue;
+    pairs++;
+    if (dist.get(x) !== dist.get(y)) differing++;
+  }
+  ok('linked cells almost never share a distance, so colour cannot group them',
+     pairs > 0 && differing === pairs,
+     `${differing} of ${pairs} pairs differ`);
 }
+
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -52,11 +52,29 @@ export class SliceMap {
     // A game with more than one player uses this to say WHOSE wall a cell is,
     // which is the single most useful thing the panel can tell them.
     this.cellFill = () => null;
-    // Are two neighbouring cells actually connected? Left unset, every pair of
-    // touching filled cells is treated as one region, which is right for
-    // terrain and wrong for a maze -- see `clusters`. Takes two full board
-    // cells and returns a boolean.
-    this.joined = null;
+    // A NETWORK drawn on the panel: cells joined by links, like a maze's
+    // passages. Set `network` to {cells, joined, colour} and the panel draws
+    // each cell reaching out to whichever of its neighbours it is actually
+    // linked to, so a run of them is one continuous strand.
+    //
+    // This is a different thing from `cellFill`, not a variant of it, and the
+    // difference is worth stating because the first attempt got it wrong.
+    // `cellFill` marks TERRAIN: cells are grouped into regions and each region
+    // drawn as one rounded slab, which is right for lava and for a rider's
+    // wall. Grouping is by colour, so two cells only merge if they are the same
+    // shade -- which means a network whose cells are individually coloured (a
+    // maze shading by distance, say) can never merge at all, and comes out as a
+    // field of separate dots however connected it really is.
+    //
+    // A network is drawn per cell instead, exactly as the body below is: reach
+    // toward each linked neighbour by the width of the gap, so the two meet
+    // flush and the joint disappears. Colour is then free to vary cell by cell
+    // without breaking a single strand apart.
+    //
+    //   cells   array of full board cells to draw
+    //   joined  (a, b) => are these two linked? Called on panel neighbours.
+    //   colour  (cell) => the cell's colour, as a CSS string
+    this.network = null;
     this.glow = null;        // Set of keys, or null
     // [left, right, below, above] -- the key or name for each edge of the
     // panel. Supplied by the game, since only it knows what its keys mean.
@@ -176,27 +194,8 @@ export class SliceMap {
         }
       }
     }
-    // Neighbours on the panel, lifted back to full board cells so the game's
-    // own `joined` can answer in the terms it thinks in.
-    const joinedHV = (a, b) => {
-      if (!this.joined) return true;
-      const pa = this.focus.slice(), pb = this.focus.slice();
-      pa[H] = a[0]; pa[V] = a[1];
-      pb[H] = b[0]; pb[V] = b[1];
-      return this.joined(pa, pb);
-    };
-    // Terrain fills its cells edge to edge, because a slab of lava really does
-    // occupy all of them and any gap would be a gap in the lava. A game that
-    // supplies `joined` is drawing a network instead, and there the gap is the
-    // information: two cells with no passage between them have to be visibly
-    // apart, or the panel says they connect. Without the inset the clusters
-    // split correctly and still LOOK merged, because their square edges meet.
-    // The same inset the body uses below, so a maze's corridors and a snake's
-    // segments are drawn to one rule.
-    const gap = this.joined ? cell * 0.16 : 0;
-    for (const group of clusters(filled, joinedHV)) {
-      const d = clusterPath(group.cells, px, py, cell, cell * 0.34, joinedHV,
-                            gap);
+    for (const group of clusters(filled)) {
+      const d = clusterPath(group.cells, px, py, cell, cell * 0.34);
       // A cluster whose outline came out empty draws nothing, rather than an
       // element with no geometry. Belt and braces: every shape of cluster
       // should produce a loop, but an empty <path> is invisible in a
@@ -269,6 +268,54 @@ export class SliceMap {
     // what you can reach, and a body drawn flat regardless of depth would be a
     // picture of a snake that is not there.
     //
+    // --- a network of linked cells ----------------------------------------
+    //
+    // A maze's passages. Each cell reaches toward the neighbours it is actually
+    // linked to, by exactly the inset -- the width of the gap between two
+    // cells' rectangles -- so linked cells meet flush and the joint disappears,
+    // while cells with no passage between them stay visibly apart. That gap is
+    // the information: it is the wall.
+    //
+    // Drawn per cell rather than by grouping into regions, which is what lets
+    // every cell carry its own colour without a strand breaking into beads.
+    if (this.network && this.network.cells) {
+      const netInset = cell * 0.16;
+      const link = (a, b) => {
+        if (!this.inSlice(a) || !this.inSlice(b)) return false;
+        const dh = Math.abs(a[H] - b[H]), dv = Math.abs(a[V] - b[V]);
+        if (dh + dv !== 1) return false;
+        return this.network.joined(a, b);
+      };
+      for (const p of this.network.cells) {
+        if (!this.inSlice(p)) continue;
+        let x0 = px(p[H]) + netInset, y0 = py(p[V]) + netInset;
+        let x1 = px(p[H]) + cell - netInset, y1 = py(p[V]) + cell - netInset;
+        // The four neighbours on this panel, each reached toward if linked.
+        for (const [dh, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const q = p.slice();
+          q[H] += dh; q[V] += dv;
+          if (!link(p, q)) continue;
+          if (dh === 1) x1 += netInset;
+          else if (dh === -1) x0 -= netInset;
+          // Which screen direction a step along +V takes depends on flipV, so
+          // ask py rather than assuming -- the same care the body takes below.
+          else if (py(q[V]) < py(p[V])) y0 -= netInset;
+          else y1 += netInset;
+        }
+        const r = document.createElementNS(NS, 'rect');
+        r.setAttribute('x', x0.toFixed(2));
+        r.setAttribute('y', y0.toFixed(2));
+        r.setAttribute('width', (x1 - x0).toFixed(2));
+        r.setAttribute('height', (y1 - y0).toFixed(2));
+        // Rounded, because a passage is a length of rope in the room it draws.
+        // The radius is small enough that a straight run still reads as one
+        // bar rather than a string of lozenges.
+        r.setAttribute('rx', (netInset * 0.9).toFixed(2));
+        r.setAttribute('fill', this.network.colour(p));
+        svg.appendChild(r);
+      }
+    }
+
     // Adjacent segments are JOINED. A segment is drawn as a rounded rectangle
     // that reaches out to whichever of its neighbours sits next to it on this
     // panel, so a run of them is one continuous shape with rounded ends rather
@@ -494,16 +541,7 @@ export class SliceMap {
 // colour test matters wherever two things can be adjacent and are not the same
 // thing -- two players' walls touching in Tron, say -- since merging those
 // would draw one region where there are two.
-// `joined` says whether two neighbouring filled cells are actually connected.
-// It defaults to yes, which is what terrain wants: a slab of lava is one
-// region, and every cell of it touching another is part of the same slab.
-//
-// A maze wants the opposite. Two of its cells can sit side by side on the panel
-// with no passage between them, and merging those into one rounded blob tells
-// the player they can walk from one to the other -- which is exactly the thing
-// the panel exists to answer, answered wrongly. Passing a predicate here makes
-// the drawn shape follow the real connections instead of the grid.
-function clusters(filled, joined = () => true) {
+function clusters(filled) {
   const seen = new Set();
   const out = [];
   for (const [k, f] of filled) {
@@ -520,7 +558,6 @@ function clusters(filled, joined = () => true) {
         if (seen.has(nk)) continue;
         const nf = filled.get(nk);
         if (!nf || nf.colour !== f.colour || nf.opacity !== f.opacity) continue;
-        if (!joined([h, v], [h + dh, v + dv])) continue;
         seen.add(nk);
         stack.push(nk);
       }
@@ -546,34 +583,16 @@ function clusters(filled, joined = () => true) {
 // precisely when that corner is on the outside of the cluster. Interior corners
 // stay square and the rectangles meet flush, so the whole thing reads as one
 // rounded shape.
-function clusterPath(cells, px, py, cell, r, joined = () => true, inset = 0) {
+function clusterPath(cells, px, py, cell, r) {
   const has = new Set(cells.map(([h, v]) => h + ',' + v));
-  // A side is open to its neighbour only if the neighbour is in this cluster
-  // AND actually joined to it. Without the second half a maze's corridors
-  // square off against cells they do not connect to, which draws the junction
-  // that is not there.
-  const at = (h, v, from) => has.has(h + ',' + v) &&
-    (!from || joined(from, [h, v]));
+  const at = (h, v) => has.has(h + ',' + v);
   let d = '';
   for (const [h, v] of cells) {
-    const me = [h, v];
-    const up = at(h, v + 1, me), down = at(h, v - 1, me);
-    const left = at(h - 1, v, me), right = at(h + 1, v, me);
-    // Pull every side that is NOT continued by a neighbour inward, so a gap
-    // shows wherever there is no connection. A side that IS continued keeps
-    // its full extent, so the two cells meet flush and the join disappears --
-    // which is what makes a corridor read as one strand rather than a row of
-    // separate tiles.
-    const x0 = px(h) + (left ? 0 : inset);
-    const x1 = px(h) + cell - (right ? 0 : inset);
-    // py gives the TOP of a cell's row, and y grows downward, so `up` (larger
-    // v) is the SMALLER y when the axis is not flipped. Ask py which way that
-    // is rather than assuming, so the two cases cannot drift apart.
-    const upIsLower = py(v + 1) > py(v);
-    const yTopOpen = upIsLower ? down : up;
-    const yBotOpen = upIsLower ? up : down;
-    const y0 = py(v) + (yTopOpen ? 0 : inset);
-    const y1 = py(v) + cell - (yBotOpen ? 0 : inset);
+    const x0 = px(h), x1 = px(h) + cell;
+    // py gives the TOP of a cell's row, and y grows downward.
+    const y0 = py(v), y1 = py(v) + cell;
+    const up = at(h, v + 1), down = at(h, v - 1);
+    const left = at(h - 1, v), right = at(h + 1, v);
     // A corner is rounded only when both of its sides are exposed.
     const tl = !up && !left ? r : 0;
     const tr = !up && !right ? r : 0;

@@ -202,25 +202,29 @@ function init() {
     isPresent: (axis) => axis < dims.length && dims[axis] > 1,
   });
   panels.configure((m) => {
-    // A cell is filled when a passage runs through it, coloured by the same
-    // near-far ramp as the rope so the panel and the room agree about which way
-    // is downhill.
-    m.cellFill = (p) => {
-      const k = key(p);
-      if (!maze || !maze.has(k)) return null;
-      const maxDist = Math.max(1, ...[...toExit.values()]);
-      const d = toExit.has(k) ? toExit.get(k) : maxDist;
-      return { colour: '#' + NEAR.clone().lerp(FAR, d / maxDist).getHexString(),
-               opacity: 0.85 };
-    };
-    // And this is what makes the panel tell the truth about a maze.
+    // The maze is drawn as a NETWORK, not as filled cells. A passage is a
+    // strand running from one cell into the next, exactly as the rope in the
+    // room is -- and where there is no passage the cells stay apart, which is
+    // how a wall appears on a panel that draws no walls.
     //
-    // Two cells side by side on the panel are not necessarily connected: the
-    // passage between them may simply not exist. Drawn as one merged blob --
-    // which is what the panel does for terrain, correctly, since a slab of lava
-    // IS one region -- it says the player can walk from one to the other, which
-    // is the exact question the panel is there to answer.
-    m.joined = (a, b) => !!maze && maze.neighbours(key(a)).includes(key(b));
+    // Filling cells instead would say the wrong thing twice over: adjacent
+    // cells would merge into a slab whether or not a passage joined them, and
+    // the distance colouring would stop them merging at all, leaving a field
+    // of separate dots. Neither is the maze.
+    m.network = {
+      get cells() {
+        return maze ? maze.cells.map((k) => k.split(',').map(Number)) : [];
+      },
+      joined: (a, b) => !!maze && maze.neighbours(key(a)).includes(key(b)),
+      // The same near-far ramp as the rope, so the panel and the room agree
+      // about which way is downhill.
+      colour: (p) => {
+        const maxDist = Math.max(1, ...[...toExit.values()]);
+        const k = key(p);
+        const d = toExit.has(k) ? toExit.get(k) : maxDist;
+        return '#' + NEAR.clone().lerp(FAR, d / maxDist).getHexString();
+      },
+    };
   });
   panels.fit();
 
