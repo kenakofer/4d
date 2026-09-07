@@ -139,3 +139,54 @@ export function bindPinch(el, orbitOf) {
   el.addEventListener('pointercancel', lift);
   return state;
 }
+
+// Drag to turn, wheel to zoom, two fingers to pinch.
+//
+// Every game that lets the player move the camera wants exactly this, and each
+// of them had written it out again: the same pointer capture, the same "a
+// pinch cancels the drag" rule, the same wheel handler. The maze had none of
+// it -- it built an Orbit and then never bound anything to drive it, so the
+// view sat wherever it was constructed -- which is the kind of omission that
+// only shows up by playing the game, and did.
+//
+// So the binding lives with the thing it drives. `orbitOf` is a function
+// rather than the orbit itself because a game may rebuild its orbit -- on a
+// resize, or a new board -- and the handlers have to find the current one
+// rather than hold the one that existed when the page loaded.
+//
+// Unknot does NOT use this. Its pointer handling has to decide between turning
+// the camera and selecting a cell, which means tracking whether a press has
+// moved far enough to count as a drag, and folding that in here would make
+// this a worse fit for the two games that just want to turn.
+export function bindOrbit(el, orbitOf) {
+  let down = null;
+  // While two fingers are down the drag stands aside, and does not resume
+  // until the remaining finger is lifted and put down again.
+  const pinch = bindPinch(el, orbitOf);
+
+  el.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    down = { lastX: ev.clientX, lastY: ev.clientY };
+    el.setPointerCapture(ev.pointerId);
+  });
+  el.addEventListener('pointermove', (ev) => {
+    if (!down) return;
+    if (pinch.active) { down = null; return; }
+    const orbit = orbitOf();
+    if (orbit) orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
+    down.lastX = ev.clientX;
+    down.lastY = ev.clientY;
+  });
+  const release = (ev) => {
+    if (!down) return;
+    try { el.releasePointerCapture(ev.pointerId); } catch (e) {}
+    down = null;
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', () => { down = null; });
+  el.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const orbit = orbitOf();
+    if (orbit) orbit.zoom(ev.deltaY);
+  }, { passive: false });
+}

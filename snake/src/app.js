@@ -14,7 +14,7 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Snake, CAUSE } from './snake.js';
-import { Orbit, bindPinch } from '../../shared/orbit.js';
+import { Orbit, bindOrbit } from '../../shared/orbit.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
@@ -1007,34 +1007,7 @@ function bindInput() {
   // Dragging the background looks around; nothing else pointer-driven touches
   // the game. Every move is named on the pad, so there is no gesture to
   // misread.
-  const c = renderer.domElement;
-  let down = null;
-  // Two fingers zoom. While they are down the drag below stands aside, and
-  // does not resume until the remaining finger is lifted and put down again.
-  const pinch = bindPinch(c, () => orbit);
-  c.addEventListener('pointerdown', (ev) => {
-    if (ev.button !== 0) return;
-    down = { lastX: ev.clientX, lastY: ev.clientY };
-    c.setPointerCapture(ev.pointerId);
-  });
-  c.addEventListener('pointermove', (ev) => {
-    if (!down) return;
-    if (pinch.active) { down = null; return; }
-    orbit.rotate(ev.clientX - down.lastX, ev.clientY - down.lastY);
-    down.lastX = ev.clientX;
-    down.lastY = ev.clientY;
-  });
-  const release = (ev) => {
-    if (!down) return;
-    try { c.releasePointerCapture(ev.pointerId); } catch (e) {}
-    down = null;
-  };
-  c.addEventListener('pointerup', release);
-  c.addEventListener('pointercancel', () => { down = null; });
-  c.addEventListener('wheel', (ev) => {
-    ev.preventDefault();
-    orbit.zoom(ev.deltaY);
-  }, { passive: false });
+  bindOrbit(renderer.domElement, () => orbit);
 }
 
 // ---------------------------------------------------------------------------
