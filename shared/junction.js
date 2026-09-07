@@ -72,3 +72,76 @@ export function junctionKind(degree, axes) {
   if (degree === 2) return n === 1 ? 'through' : 'corner';
   return 'junction';
 }
+
+// ---------------------------------------------------------------------------
+// Straight runs
+//
+// A rope is built one cylinder per passage, so a corridor five cells long is
+// five cylinders meeting end to end at the four cells between. Those cells have
+// no joint -- a straight-through cell is left bare on purpose, because a ball
+// there is the beading the joints exist to avoid -- so each of those four seams
+// is two cylinder ends touching with nothing over them. For the rope that is
+// harmless: the two cylinders are the same colour and the same radius, and the
+// seam does not show. For the HALO it is the whole problem, because a back face
+// on a shared plane is the nearest halo surface at the seam and paints a ring
+// across its neighbour.
+//
+// overshoot() answers that by making the shells overlap past the seam. This
+// answers it by not making the seam at all: consecutive collinear passages are
+// welded into one run, and a corridor becomes a single cylinder whose only ends
+// are at the two joints that terminate it. There is nothing at the cells in
+// between to overlap, to nick, or to band, because nothing is drawn there.
+//
+// The seams that remain are exactly the cells that DO have a joint, which is
+// the one place a seam is already covered -- the ball sits over it.
+//
+// `edges` are pairs of vertices, `axisOf(a, b)` names the axis a passage runs
+// along, and `jointAt(k)` says whether a cell has a ball on it. Vertices are
+// compared as keys, so anything a Map can hold will do: this is arithmetic
+// about a graph, with no geometry and no dimension count in it.
+export function straightRuns(edges, { axisOf, jointAt }) {
+  // Every passage, indexed by the cells it touches, so a run can be walked out
+  // from one end without searching the whole list again at each step.
+  const out = new Map();       // cell -> [{ to, axis }]
+  const link = (a, b) => {
+    if (!out.has(a)) out.set(a, []);
+    out.get(a).push({ to: b, axis: axisOf(a, b) });
+  };
+  for (const [a, b] of edges) { link(a, b); link(b, a); }
+
+  // A cell is passed THROUGH by a run when it has no joint and exactly one
+  // passage carrying on along the same axis. Anywhere else the run stops, which
+  // is what puts every run's ends on joints.
+  const onward = (k, axis, from) => {
+    if (jointAt(k)) return null;
+    let next = null;
+    for (const e of out.get(k) || []) {
+      if (e.axis !== axis || e.to === from) continue;
+      if (next !== null) return null;   // two ways on: not a run, whatever it is
+      next = e.to;
+    }
+    return next;
+  };
+
+  const seen = new Set();
+  const pair = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
+
+  const runs = [];
+  for (const [a, b] of edges) {
+    if (seen.has(pair(a, b))) continue;
+    const axis = axisOf(a, b);
+    seen.add(pair(a, b));
+    // Walk to the far end in each direction. A run is symmetric, so it is the
+    // same walk twice with the two ends swapped.
+    let head = a, prev = b, next;
+    while ((next = onward(head, axis, prev)) !== null) {
+      seen.add(pair(head, next)); prev = head; head = next;
+    }
+    let tail = b; prev = a;
+    while ((next = onward(tail, axis, prev)) !== null) {
+      seen.add(pair(tail, next)); prev = tail; tail = next;
+    }
+    runs.push({ from: head, to: tail, axis });
+  }
+  return runs;
+}
