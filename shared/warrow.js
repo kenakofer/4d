@@ -85,30 +85,48 @@ export const TINT = 0.62;
 // shading from where the lights happen to be, and it should not vanish when the
 // camera crosses behind its plane.
 //
-// depthTest is OFF, which is the whole reason the arrow can be seen at all.
-//
 // The arrow's tail is deliberately buried in the joint it grows out of -- that
 // is what makes it read as attached rather than parked nearby -- and a joint is
-// an opaque ball that writes depth. Tested against that depth, the buried part
+// an opaque ball that writes depth. Tested against that depth the buried part
 // simply loses, and what survives is a chevron floating clear of the ball with
 // the ball's own halo cutting between the two. Raising renderOrder does not fix
 // it: both are opaque, so the depth buffer decides and draw order does not come
 // into it.
 //
-// So the arrow stops asking. It is not a solid in the room, it is a label
-// pinned to a cell, and a label is not occluded by the thing it labels. What
-// keeps that from turning into arrows floating over the whole scene is the halo,
-// which does write depth: the pair is drawn late, together, and the halo hides
-// what is behind them both.
+// The first answer was to switch depthTest off entirely, and it went too far.
+// An arrow that never asks about depth is not merely un-occluded by its own
+// joint -- it is un-occluded by EVERYTHING, so it shows through the table it is
+// standing over and through any strand nearer the camera than itself. The table
+// says of itself that nothing about the game should ever be read through it,
+// and the arrows were reading through it.
+//
+// So the arrow tests depth like everything else, and is biased toward the
+// camera by roughly the depth of the ball it grows out of. It wins against its
+// own joint, which is a fixed small distance away, and loses to the table and
+// to strands in front of it, which are not. POLYGON_OFFSET is in depth-buffer
+// units rather than world ones, which is what makes it hold at any distance the
+// camera reaches rather than needing to be retuned per zoom.
 export function arrowMaterial(color, opacity = 1) {
   return new THREE.MeshBasicMaterial({
     color: color.clone().multiplyScalar(TINT),
     side: THREE.DoubleSide,
     transparent: opacity < 1,
     opacity,
-    depthTest: false,
+    polygonOffset: true,
+    polygonOffsetFactor: POLYGON_OFFSET,
+    polygonOffsetUnits: POLYGON_OFFSET,
   });
 }
+
+// How far toward the camera the arrow and its halo are biased, in depth-buffer
+// units.
+//
+// Enough to clear the joint the arrow grows out of, which is the only thing it
+// is entitled to win against. Small enough that a strand genuinely in front of
+// the arrow still hides it -- that is the whole reason the halo exists, and an
+// arrow that cheated its way past would be making the same claim the halo is
+// there to deny.
+export const POLYGON_OFFSET = -4;
 
 // The arrow's halo: the same shell the rope wears, so an arrow crossing a rope
 // breaks it exactly as a rope would and the two read as the same kind of object.
@@ -128,10 +146,13 @@ export function arrowMaterial(color, opacity = 1) {
 export function arrowHaloMaterial(opacity = 1) {
   const m = haloMaterial(opacity);
   m.side = THREE.DoubleSide;
-  // Untested for the same reason the arrow is -- it has to reach the same
-  // pixels the arrow does, including the ones inside the joint -- but it still
-  // WRITES depth, so the pair together still hides whatever is behind them.
-  m.depthTest = false;
+  // Biased forward by the same amount as the arrow, for the same reason: it has
+  // to reach the same pixels the arrow does, including the ones inside the
+  // joint. Any difference between the two offsets would show as the halo
+  // detaching from its arrow at some angles.
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = POLYGON_OFFSET;
+  m.polygonOffsetUnits = POLYGON_OFFSET;
   return m;
 }
 
@@ -204,11 +225,10 @@ export function aim(mesh, from, to, eye) {
 // cells, and a triangle apiece would be a lot of buffers for six vertices.
 // ---------------------------------------------------------------------------
 export class Arrows {
-  // Above the rope, and above its halo. With depthTest off on both arrow and
-  // shell, this ordering is what decides the whole layer: the rope and its
-  // shells go down first, then every arrow's halo, then every arrow. Anything
-  // lower is painted over, which is the point -- the arrow has to cover the
-  // joint it grows out of, or it does not read as growing out of it.
+  // Above the rope, and above its halo. Both arrow and shell now test depth, so
+  // this ordering no longer decides what wins -- the depth buffer does. It
+  // still settles the tie between an arrow and its OWN halo, which sit at the
+  // same offset and must go down halo first.
   constructor(parent, { order = 3, haloOrder = 2.9 } = {}) {
     this.parent = parent;
     this.order = order;
