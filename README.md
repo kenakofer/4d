@@ -1,5 +1,11 @@
 # 4D Games
 
+Simple 4D grid games that I've painstakingly vibe-coded such that I and friends may gain spatial intuitions above three dimensions.
+
+Everything below the break is AI generated. This text is human, and user-facing text in the webapp is human, and that's about it. Everything else is Claude, as indicated by the commits. I'm keeping all the prompts around in case I want to share those for the curious.
+
+=====
+
 Small games played in four dimensions — and, where it makes sense, in three, two
 or five. They share one set of controls and one way of drawing the extra
 direction, so the spatial sense you build in any of them carries into the rest.
