@@ -33,6 +33,7 @@ import { SlicePanels } from '../../shared/slicepanels.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
+import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { key, step } from '../../shared/grid.js';
 import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
 
@@ -285,15 +286,19 @@ function buildFrames() {
 // orientation and colour go in per instance.
 // ---------------------------------------------------------------------------
 
+// The rope, and the dark shells that make it read where it crosses itself. A
+// maze crosses itself constantly -- that is what a maze IS -- so the halo
+// matters more here than anywhere, and like the rope it has to be instanced.
 let segMesh = null, jointMesh = null, wLines = null;
+let segHalo = null, jointHalo = null;
 
 function rebuildRope() {
-  for (const m of [segMesh, jointMesh, wLines]) {
+  for (const m of [segMesh, jointMesh, wLines, segHalo, jointHalo]) {
     if (!m) continue;
     ropeGroup.remove(m);
     m.geometry.dispose();
   }
-  segMesh = jointMesh = wLines = null;
+  segMesh = jointMesh = wLines = segHalo = jointHalo = null;
   if (!maze) return;
 
   const axisOf = (a, b) => Maze.axisOf(a, b);
@@ -328,19 +333,31 @@ function rebuildRope() {
   const up = new THREE.Vector3(0, 1, 0);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const va = new THREE.Vector3(), vb = new THREE.Vector3(), mid = new THREE.Vector3();
+  segHalo = new THREE.InstancedMesh(segGeo, haloMaterial(), flat.length);
+  segHalo.renderOrder = HALO_ORDER;
+  segMesh.renderOrder = ROPE_ORDER;
   flat.forEach(([a, b], i) => {
     va.set(...proj(a)); vb.set(...proj(b));
     mid.copy(va).add(vb).multiplyScalar(0.5);
     const dir = vb.clone().sub(va);
     q.setFromUnitVectors(up, dir.clone().normalize());
-    m4.compose(mid, q, new THREE.Vector3(1, dir.length(), 1));
+    const len = dir.length();
+    m4.compose(mid, q, new THREE.Vector3(1, len, 1));
     segMesh.setMatrixAt(i, m4);
     const col = colourAt(a).lerp(colourAt(b), 0.5);
     segMesh.setColorAt(i, col);
+    // Fatter across the tube and longer along it -- see overshoot() in halo.js.
+    // A maze joints on the axes meeting at a cell, so the smallest joint on a
+    // run is the straight-through radius, and the overshoot is measured from
+    // that: sized to the joint it must hide inside, not the biggest one going.
+    m4.compose(mid, q, new THREE.Vector3(
+      fatten(TUBE), len + 2 * overshoot(TUBE), fatten(TUBE)));
+    segHalo.setMatrixAt(i, m4);
   });
   segMesh.instanceMatrix.needsUpdate = true;
   if (segMesh.instanceColor) segMesh.instanceColor.needsUpdate = true;
-  ropeGroup.add(segMesh);
+  segHalo.instanceMatrix.needsUpdate = true;
+  ropeGroup.add(segHalo, segMesh);
 
   // --- joints --------------------------------------------------------------
   // Only where the geometry needs one. A cell the rope runs straight through is
@@ -364,6 +381,9 @@ function rebuildRope() {
       color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.24,
       transparent: true }),
     jointed.length);
+  jointHalo = new THREE.InstancedMesh(jointGeo, haloMaterial(), jointed.length);
+  jointHalo.renderOrder = HALO_ORDER;
+  jointMesh.renderOrder = ROPE_ORDER;
   jointed.forEach(({ k, axes, kind }, i) => {
     const r = jointRadius(TUBE, axes);
     // A junction is marked, because a place where the player has to choose is
@@ -372,14 +392,19 @@ function rebuildRope() {
     // and the maze read as a heap of beads with rope incidental. The colour is
     // doing the work, so the size only has to be enough to notice.
     const scale = kind === 'junction' ? r * 1.25 : r;
-    m4.compose(new THREE.Vector3(...proj(k)), new THREE.Quaternion(),
+    const pos = new THREE.Vector3(...proj(k));
+    m4.compose(pos, new THREE.Quaternion(),
                new THREE.Vector3(scale, scale, scale));
     jointMesh.setMatrixAt(i, m4);
     jointMesh.setColorAt(i, kind === 'junction' ? JUNCTION.clone() : colourAt(k));
+    const hs = fatten(scale) * scale;
+    m4.compose(pos, new THREE.Quaternion(), new THREE.Vector3(hs, hs, hs));
+    jointHalo.setMatrixAt(i, m4);
   });
   jointMesh.instanceMatrix.needsUpdate = true;
   if (jointMesh.instanceColor) jointMesh.instanceColor.needsUpdate = true;
-  ropeGroup.add(jointMesh);
+  jointHalo.instanceMatrix.needsUpdate = true;
+  ropeGroup.add(jointHalo, jointMesh);
 
   // --- the passages that leave the slice -----------------------------------
   const pts = [];

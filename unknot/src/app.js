@@ -9,6 +9,7 @@ import { Minimap, rockAt } from './minimap.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { dropConfetti } from '../../shared/confetti.js';
+import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -429,7 +430,13 @@ function rebuildRope() {
         color: col, emissive: col, emissiveIntensity: 0.28,
         transparent: f < 1, opacity: f }));
       jm.position.set(...proj(pz.path[i]));
+      jm.renderOrder = ROPE_ORDER;
       group.add(jm);
+      const jh = new THREE.Mesh(jointGeo, haloMaterial(f));
+      jh.position.copy(jm.position);
+      jh.scale.setScalar(fatten(JOINT));
+      jh.renderOrder = HALO_ORDER;
+      group.add(jh);
     }
 
     if (i < n - 1) {
@@ -462,10 +469,20 @@ function rebuildRope() {
       sm.position.copy(mid);
       sm.scale.set(1, len, 1);
       sm.quaternion.copy(q);
+      sm.renderOrder = ROPE_ORDER;
       group.add(sm);
+
+      // Fatter across the tube, and LONGER along it -- see overshoot() for why
+      // shells that merely met end to end banded every straight run.
+      const sh = new THREE.Mesh(segGeo, haloMaterial(fs));
+      sh.position.copy(mid);
+      sh.scale.set(fatten(TUBE), len + 2 * overshoot(JOINT), fatten(TUBE));
+      sh.quaternion.copy(q);
+      sh.renderOrder = HALO_ORDER;
+      group.add(sh);
     }
   }
-  group.renderOrder = 1;
+  group.renderOrder = ROPE_ORDER;
   rope = { group };
   gridGroup.add(group);
 }

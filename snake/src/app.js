@@ -20,6 +20,7 @@ import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
+import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../shared/tutorial-entry.js';
@@ -626,7 +627,13 @@ function redraw() {
         color: col, emissive: col, emissiveIntensity: 0.3,
         transparent: f < 1, opacity: f }));
       m.position.set(...proj(p));
+      m.renderOrder = ROPE_ORDER;
       add(m);
+      const h = new THREE.Mesh(jointGeo, haloMaterial(f));
+      h.position.copy(m.position);
+      h.scale.setScalar(fatten(JOINT));
+      h.renderOrder = HALO_ORDER;
+      add(h);
     }
 
     if (i + 1 < n) {
@@ -652,9 +659,19 @@ function redraw() {
         transparent: fs < 1, opacity: fs }));
       m.position.copy(a.clone().add(b).multiplyScalar(0.5));
       m.scale.set(1, len, 1);
-      m.quaternion.copy(
-        new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize()));
+      const rot = new THREE.Quaternion().setFromUnitVectors(
+        up, dir.clone().normalize());
+      m.quaternion.copy(rot);
+      m.renderOrder = ROPE_ORDER;
       add(m);
+      // Fatter across the tube and longer along it -- see overshoot() in
+      // halo.js.
+      const h = new THREE.Mesh(segGeo, haloMaterial(fs));
+      h.position.copy(m.position);
+      h.scale.set(fatten(TUBE), len + 2 * overshoot(JOINT), fatten(TUBE));
+      h.quaternion.copy(rot);
+      h.renderOrder = HALO_ORDER;
+      add(h);
     }
   }
 
