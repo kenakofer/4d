@@ -18,6 +18,9 @@ import { sliceRadius } from '../shared/orbshape.js';
 import { UV_SCALE, MARBLE_RINGS, MARBLE_TEXELS, VEINS, WARP, YAW_FLOW,
   YAW_FLOW_TURNS, DRIFT_RADIUS, DRIFT_SPIN, OUTLINE_STEP } from '../shared/tableconst.js';
 import { topSegments, topVertexCount, topIndex, fillTop } from '../shared/tablegrid.js';
+import { straightRuns } from '../shared/junction.js';
+import { armMask, armsOf, sleeveFraction, inSleeve, ARM_DIRS }
+  from '../shared/haloshape.js';
 import { makePieces, advance, pieceCount, COUNT, COUNT_WIDTH, SIZE, STAGGER,
   GRAVITY, DRAG }
   from '../shared/confettishape.js';
@@ -1105,6 +1108,142 @@ console.log('\nconfetti');
   eq('a piece straddling the bottom edge is kept', advance(edge, 0, H).length, 1);
   edge[0].y = H + 11;
   eq('a piece fully below it is gone', advance(edge, 0, H).length, 0);
+}
+
+console.log('\nwelding a straight run into one cylinder');
+{
+  // Cells are "x,y" and an axis is which coordinate differs, which is all
+  // straightRuns needs to know about them.
+  const axisOf = (a, b) => {
+    const p = a.split(',').map(Number), q = b.split(',').map(Number);
+    return p.findIndex((v, i) => v !== q[i]);
+  };
+  const runs = (edges, joints) =>
+    straightRuns(edges, { axisOf, jointAt: (k) => joints.includes(k) })
+      .map(({ from, to, axis }) => [from, to, axis].join(' '))
+      .sort();
+
+  // A corridor with a ball capping each end is one cylinder, not three.
+  eq('a corridor is one run',
+     runs([['0,0', '1,0'], ['1,0', '2,0'], ['2,0', '3,0']], ['0,0', '3,0']),
+     ['0,0 3,0 0']);
+
+  // The direction the walk happens to start in must not change the answer.
+  eq('a corridor reads the same backwards',
+     runs([['2,0', '3,0'], ['1,0', '2,0'], ['0,0', '1,0']], ['0,0', '3,0']),
+     ['0,0 3,0 0']);
+
+  // A bend has a ball on it, so it cuts: the run stops where the ball is.
+  eq('a bend cuts the run',
+     runs([['0,0', '1,0'], ['1,0', '2,0'], ['2,0', '2,1']], ['2,0']),
+     ['0,0 2,0 0', '2,0 2,1 1']);
+
+  // A junction cuts every arm, even the two that carry straight on through it.
+  // Three tubes meeting leave a notch, so there is a ball there covering the
+  // seam -- which is exactly why the run is allowed to end.
+  eq('a junction cuts all its arms',
+     runs([['0,0', '1,0'], ['1,0', '2,0'], ['1,0', '1,1']], ['1,0']),
+     ['0,0 1,0 0', '1,0 1,1 1', '1,0 2,0 0']);
+
+  // Turning a corner is not carrying on: two passages on different axes at a
+  // cell never weld, ball or no ball.
+  eq('a corner never welds',
+     runs([['0,0', '1,0'], ['1,0', '1,1']], []),
+     ['0,0 1,0 0', '1,0 1,1 1']);
+
+  // Every passage ends up in exactly one run, whatever the shape.
+  {
+    const edges = [['0,0', '1,0'], ['1,0', '2,0'], ['2,0', '3,0'],
+                   ['1,0', '1,1'], ['1,1', '1,2']];
+    const got = straightRuns(edges, { axisOf, jointAt: (k) => k === '1,0' });
+    const cells = got.reduce((n, r) => {
+      const p = r.from.split(',').map(Number), q = r.to.split(',').map(Number);
+      return n + Math.abs(p[r.axis] - q[r.axis]);
+    }, 0);
+    eq('the runs account for every passage exactly once', cells, edges.length);
+  }
+
+  // A run in a fourth axis is a run like any other: nothing here counts
+  // dimensions.
+  eq('a run works in any axis',
+     straightRuns([['0,0,0,0', '0,0,0,1'], ['0,0,0,1', '0,0,0,2']],
+                  { axisOf, jointAt: () => false })
+       .map(({ from, to, axis }) => [from, to, axis].join(' ')),
+     ['0,0,0,0 0,0,0,2 3']);
+
+  eq('no passages, no runs', runs([], []), []);
+}
+
+console.log('\nthe shape of a joint halo');
+{
+  // The mask names the arm, and the bit order is +x -x +y -y +z -z.
+  eq('one arm each way', ARM_DIRS.length, 6);
+  eq('+x is the first bit', armMask([[1, 0, 0]]), 1);
+  eq('-x is the second', armMask([[-1, 0, 0]]), 2);
+  eq('+z is the fifth', armMask([[0, 0, 1]]), 16);
+  eq('a straight run names both ends',
+     armMask([[1, 0, 0], [-1, 0, 0]]), 3);
+
+  // Length carries no meaning: a neighbour three cells away is the same arm as
+  // one next door, because what is being named is a direction.
+  eq('length does not matter', armMask([[7, 0, 0]]), armMask([[1, 0, 0]]));
+  // Vector3-shaped input, which is what a renderer has in hand.
+  eq('an object direction works', armMask([{ x: 0, y: -2, z: 0 }]), 8);
+  // A step that leaves the slice is not drawn as a tube, so it is not an arm
+  // and the ball must keep its halo that way.
+  eq('an off-axis direction is not an arm', armMask([[0, 0, 0]]), 0);
+  eq('naming the same arm twice is naming it once',
+     armMask([[1, 0, 0], [3, 0, 0]]), 1);
+
+  eq('the mask unpacks to the arms it was built from',
+     armsOf(armMask([[1, 0, 0], [0, 0, -1]])), [[1, 0, 0], [0, 0, -1]]);
+
+  // The cut angle is the sleeve over the ball, and the halo width cancels.
+  const T = 0.115, jr = T * Math.SQRT2;
+  ok('the cone is 45 degrees at a right-angle joint',
+     close(sleeveFraction(T, jr), 1 / Math.SQRT2),
+     `got ${sleeveFraction(T, jr)}`);
+  ok('a joint with no notch cuts a hemisphere and no more',
+     sleeveFraction(T, T) === 1, `got ${sleeveFraction(T, T)}`);
+  // A dead end's ball is its own tube's radius, and once the ball wears a
+  // thinner shell than the tube does the sleeve is the wider of the two. Left
+  // unclamped that cuts the whole ball; clamped it cuts the half buried in the
+  // tube and leaves the round end -- which is the only part anyone can see.
+  ok('a sleeve wider than the ball still only cuts a hemisphere',
+     sleeveFraction(T * 2, T) === 1, `got ${sleeveFraction(T * 2, T)}`);
+  {
+    const cap = armMask([[1, 0, 0]]);
+    const at = (deg) => [Math.cos(deg * Math.PI / 180), Math.sin(deg * Math.PI / 180), 0];
+    ok('the buried half of a cap goes', inSleeve(at(0), cap, 1));
+    ok('the round end of a cap stays', !inSleeve(at(180), cap, 1));
+  }
+
+  // The carve itself, on the unit sphere, along a +x arm.
+  const s = 1 / Math.SQRT2;
+  const at = (deg) => [Math.cos(deg * Math.PI / 180), Math.sin(deg * Math.PI / 180), 0];
+  const x = armMask([[1, 0, 0]]);
+  ok('straight down the arm is cut', inSleeve(at(0), x, s));
+  ok('just inside the cone is cut', inSleeve(at(44), x, s));
+  ok('just outside it is kept', !inSleeve(at(46), x, s));
+  ok('the equator between arms is kept', !inSleeve(at(90), x, s));
+
+  // The bug that made the last attempt do nothing: the POLE is what the wrong
+  // test removes, and the pole is buried inside the tube. The collar is at the
+  // arm's equator, and that is what has to go.
+  ok('the far side of the ball is kept', !inSleeve(at(180), x, s));
+  ok('the opposite arm is not cut by this one', !inSleeve(at(135), x, s));
+
+  // With both arms of a straight run named, both cones go and the middle band
+  // survives -- which is the band that is actually filling a notch.
+  const both = armMask([[1, 0, 0], [-1, 0, 0]]);
+  ok('both ends of a straight run are cut', inSleeve(at(0), both, s));
+  ok('and so is the other one', inSleeve(at(180), both, s));
+  ok('but the waist between them stays', !inSleeve(at(90), both, s));
+
+  // A joint with no arms named keeps its whole halo, which is what an
+  // unrecognised joint must do: err toward drawing the outline, not toward
+  // punching holes in it.
+  ok('no arms means no cut', !inSleeve(at(0), 0, s));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

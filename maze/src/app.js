@@ -24,16 +24,20 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { generate, distances, Maze, DEFAULTS } from './maze.js';
-import { jointRadius, needsJoint, junctionKind, axesAt } from '../../shared/junction.js';
+import { jointRadius, needsJoint, junctionKind, axesAt, straightRuns }
+  from '../../shared/junction.js';
 import { Ring, Slide } from '../../shared/ring.js';
-import { Orbit } from '../../shared/orbit.js';
+import { Orbit, bindOrbit } from '../../shared/orbit.js';
+import { rockAt } from '../../shared/rock.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { KEYMAP, dirVec } from '../../shared/pad.js';
 import { SlicePanels } from '../../shared/slicepanels.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
-import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { haloMaterial, jointHaloMaterial, fatten, fattenJoint, overshoot,
+  shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { armMask, sleeveFraction } from '../../shared/haloshape.js';
 import { Arrows } from '../../shared/warrow.js';
 import { key, step } from '../../shared/grid.js';
 import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
@@ -171,6 +175,9 @@ function init() {
   };
   camera.position.set(...orbit.position());
   camera.lookAt(...orbit.target);
+  // Drag to turn, wheel to zoom, two fingers to pinch -- the same as every
+  // other game, from the same place, so it cannot drift apart from them again.
+  bindOrbit(canvas, () => orbit);
 
   pause = new PauseMenu({ onRestart: newMaze });
   // The two slice panels and the split pad that goes with them, all shared
@@ -308,16 +315,47 @@ function rebuildRope() {
     return NEAR.clone().lerp(FAR, d / maxDist);
   };
 
+  // --- joints --------------------------------------------------------------
+  // Worked out first, because the segments need to know where the balls are:
+  // a run of rope is cut at the cells that have one and nowhere else.
+  //
+  // Only where the geometry needs one. A cell the rope runs straight through is
+  // left bare: its two segments are collinear and meet flush, and a ball there
+  // is the lump that makes rope look beaded.
+  //
+  // This is where a maze departs from a path. Unknot decides by comparing the
+  // step in against the step out, which needs there to be exactly one of each.
+  // Here the decision is made from the set of axes meeting at the cell, which
+  // is the same answer for a path and still an answer for a four-way junction.
+  const jointed = [];
+  const hasJoint = new Set();
+  for (const k of maze.cells) {
+    const axes = axesAt(maze.neighbours(k), k, axisOf);
+    if (!needsJoint(maze.degree(k), axes)) continue;
+    jointed.push({ k, axes, kind: junctionKind(maze.degree(k), axes) });
+    hasJoint.add(k);
+  }
+
   // --- segments ------------------------------------------------------------
   // A passage that stays inside one slice is drawn as rope. A passage that
   // steps in w is not: it is not a length of strand lying in space, it is the
   // same maze continuing in the next frame, and drawing it as rope would claim
-  // a distance that is not there. It gets a thin line, exactly as unknot does
-  // for the same reason.
+  // a distance that is not there. It gets an arrow instead, exactly as unknot
+  // does for the same reason.
   const flat = [], hops = [];
   for (const [a, b] of maze.edges()) {
     (axisOf(a, b) === viewAxes[3] ? hops : flat).push([a, b]);
   }
+
+  // One cylinder per straight RUN, not per passage -- see straightRuns() in
+  // junction.js. A corridor was a line of cylinders meeting end to end at cells
+  // that carry no ball, and every one of those seams was a place for the halo
+  // shells to band. Welded into one cylinder there is no seam there to band,
+  // and the ends that remain are the joints, which cover their own.
+  //
+  // The w passages are held out of the weld: a run has to be a length of rope
+  // lying in the slice, and a step that leaves the slice is not drawn as one.
+  const runs = straightRuns(flat, { axisOf, jointAt: (k) => hasJoint.has(k) });
 
   const segGeo = new THREE.CylinderGeometry(TUBE, TUBE, 1, 10);
   // White, because an instance colour MULTIPLIES the material's own. Left at
@@ -329,24 +367,28 @@ function rebuildRope() {
     new THREE.MeshLambertMaterial({
       color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.24,
       transparent: true }),
-    flat.length);
+    runs.length);
   const up = new THREE.Vector3(0, 1, 0);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
   const va = new THREE.Vector3(), vb = new THREE.Vector3(), mid = new THREE.Vector3();
   // Open ended -- see shellGeometry(); a cap here bands every straight run.
   segHalo = new THREE.InstancedMesh(
-    shellGeometry(TUBE, 10), haloMaterial(), flat.length);
+    shellGeometry(TUBE, 10), haloMaterial(), runs.length);
   segHalo.renderOrder = HALO_ORDER;
   segMesh.renderOrder = ROPE_ORDER;
-  flat.forEach(([a, b], i) => {
-    va.set(...proj(a)); vb.set(...proj(b));
+  runs.forEach(({ from, to }, i) => {
+    va.set(...proj(from)); vb.set(...proj(to));
     mid.copy(va).add(vb).multiplyScalar(0.5);
     const dir = vb.clone().sub(va);
     q.setFromUnitVectors(up, dir.clone().normalize());
     const len = dir.length();
     m4.compose(mid, q, new THREE.Vector3(1, len, 1));
     segMesh.setMatrixAt(i, m4);
-    const col = colourAt(a).lerp(colourAt(b), 0.5);
+    // The two ends' colours averaged. A run is at most a few cells long -- the
+    // generator bends too often for corridors -- so the distance colour it
+    // stands for barely varies along it, and one colour for the run says the
+    // same thing a per-cell ramp did.
+    const col = colourAt(from).lerp(colourAt(to), 0.5);
     segMesh.setColorAt(i, col);
     // Fatter across the tube and longer along it -- see overshoot() in halo.js.
     // A maze joints on the axes meeting at a cell, so the smallest joint on a
@@ -361,21 +403,6 @@ function rebuildRope() {
   segHalo.instanceMatrix.needsUpdate = true;
   ropeGroup.add(segHalo, segMesh);
 
-  // --- joints --------------------------------------------------------------
-  // Only where the geometry needs one. A cell the rope runs straight through is
-  // left bare: its two segments are collinear and meet flush, and a ball there
-  // is the lump that makes rope look beaded.
-  //
-  // This is where a maze departs from a path. Unknot decides by comparing the
-  // step in against the step out, which needs there to be exactly one of each.
-  // Here the decision is made from the set of axes meeting at the cell, which
-  // is the same answer for a path and still an answer for a four-way junction.
-  const jointed = [];
-  for (const k of maze.cells) {
-    const axes = axesAt(maze.neighbours(k), k, axisOf);
-    if (!needsJoint(maze.degree(k), axes)) continue;
-    jointed.push({ k, axes, kind: junctionKind(maze.degree(k), axes) });
-  }
   const jointGeo = new THREE.SphereGeometry(1, 12, 10);
   jointMesh = new THREE.InstancedMesh(
     jointGeo,
@@ -383,9 +410,18 @@ function rebuildRope() {
       color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.24,
       transparent: true }),
     jointed.length);
-  jointHalo = new THREE.InstancedMesh(jointGeo, haloMaterial(), jointed.length);
+  // Its own copy of the sphere, not jointGeo: the halo hangs per-instance
+  // attributes on its geometry, and the rope's joints have no use for them.
+  jointHalo = new THREE.InstancedMesh(
+    jointGeo.clone(), jointHaloMaterial(), jointed.length);
   jointHalo.renderOrder = HALO_ORDER;
   jointMesh.renderOrder = ROPE_ORDER;
+  // Which way this joint's arms leave, and how wide a cone each one takes out
+  // of the halo ball -- see haloshape.js. Both vary per joint, so both are
+  // instanced: a junction's ball is scaled up to mark it while its arms stay
+  // the width they were, which makes its cone narrower than a corner's.
+  const masks = new Float32Array(jointed.length);
+  const fracs = new Float32Array(jointed.length);
   jointed.forEach(({ k, axes, kind }, i) => {
     const r = jointRadius(TUBE, axes);
     // A junction is marked, because a place where the player has to choose is
@@ -399,10 +435,23 @@ function rebuildRope() {
                new THREE.Vector3(scale, scale, scale));
     jointMesh.setMatrixAt(i, m4);
     jointMesh.setColorAt(i, kind === 'junction' ? JUNCTION.clone() : colourAt(k));
-    const hs = fatten(scale) * scale;
+    const hs = fattenJoint(scale) * scale;
     m4.compose(pos, new THREE.Quaternion(), new THREE.Vector3(hs, hs, hs));
     jointHalo.setMatrixAt(i, m4);
+    // The arms are the passages drawn as TUBE. A step that leaves the slice is
+    // an arrow, not a tube, so it wears no sleeve and the ball keeps its halo
+    // that way -- it drops out by itself, having no component on these axes.
+    masks[i] = armMask(maze.neighbours(k)
+      .filter((n) => axisOf(k, n) !== viewAxes[3])
+      .map((n) => new THREE.Vector3(...proj(n)).sub(pos)));
+    // Measured against the halo ball this instance actually has, which is why
+    // the junction's 1.25 has to be in here and not in a constant.
+    fracs[i] = sleeveFraction(fatten(TUBE) * TUBE, hs);
   });
+  jointHalo.geometry.setAttribute(
+    'armMask', new THREE.InstancedBufferAttribute(masks, 1));
+  jointHalo.geometry.setAttribute(
+    'sleeveFrac', new THREE.InstancedBufferAttribute(fracs, 1));
   jointMesh.instanceMatrix.needsUpdate = true;
   if (jointMesh.instanceColor) jointMesh.instanceColor.needsUpdate = true;
   jointHalo.instanceMatrix.needsUpdate = true;
@@ -474,6 +523,7 @@ function updateHud() {
 // The loop
 // ---------------------------------------------------------------------------
 
+const t0 = performance.now();
 let last = 0;
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000 || 0);
@@ -486,8 +536,16 @@ function frame(t) {
   // The scenery follows the CAMERA's lateral angle, not the player's w. The
   // slices are what move with w; the table and the sky are the room they stand
   // in, and turning them with a gameplay move would make the room lurch.
+  //
+  // The rock is set BEFORE the scenery is updated, because props.update reads
+  // orbit.rockYaw to place the table -- so rocking afterwards would shape the
+  // room from the previous frame's swing.
+  if (orbit) {
+    const r = rockAt(t - t0);
+    orbit.rock(r.yaw, r.tilt);
+  }
   if (props && orbit) {
-    props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t / 1000, camera);
+    props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t - t0, camera);
   }
   if (panels && maze) panels.draw(at.split(',').map(Number));
   if (arrows) arrows.face(camera.position);

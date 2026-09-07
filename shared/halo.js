@@ -39,10 +39,20 @@ import { COLORS } from './scene.js';
 // This is the width of the gap, and it is the only number here that is a matter
 // of taste. Too thin and a crossing still reads as a seam; too thick and the
 // rope looks outlined, like a cartoon, and the halo starts eating the thin
-// strands behind it even where they are not really occluded. A sixth of a tube
-// radius is enough: the break only has to be VISIBLE, and once it is, every
-// extra pixel is width taken out of the strand behind it for nothing.
-export const HALO = 0.17;
+// strands behind it even where they are not really occluded. The break only has
+// to be VISIBLE, and once it is, every extra pixel is width taken out of the
+// strand behind it for nothing.
+//
+// It was a sixth of a tube radius, and that was too much. The case that shows
+// it is a passage running away from the camera: seen end on it is a small disc
+// of rope, and every part of the halo around it -- the sleeve's whole
+// circumference -- is pointed straight at the eye at once. There is nothing
+// behind such an edge for the halo to break, so the entire ring is width spent
+// on an occlusion that is not happening, and a maze full of receding passages
+// reads as a field of dark rings with rope inside them. Halved, the break is
+// still plainly there where two strands cross -- which is the only place it was
+// ever needed -- and a passage pointing at you is nearly all rope.
+export const HALO = 0.085;
 
 // The halo's colour. The scene's own background, so the gap reads as a hole
 // punched through to nothing rather than as a dark line drawn on top -- which
@@ -76,6 +86,25 @@ export function haloMaterial(opacity = 1) {
 // it on all three.
 export function fatten(r) {
   return (r + HALO * r) / r;   // = 1 + HALO, written so the units are visible
+}
+
+// How much of the halo width a JOINT's ball gets. A fraction of HALO, not HALO.
+//
+// fatten() is a ratio, so a bigger sphere gets a proportionally thicker shell:
+// a joint ball of tube*sqrt(2) comes out with a rim sqrt(2) times the tube's,
+// for no reason except that it is bigger. That is backwards. A joint is the
+// same strand as the tube it joins -- it is a bend in a rope, not a bead on it
+// -- and its outline should not announce itself more loudly than the rope's
+// does merely for being round.
+//
+// So the ball takes half the width, which lands its rim slightly INSIDE the
+// tube's and lets the joint read as the strand turning a corner rather than as
+// a knuckle wearing its own outline.
+export const JOINT_HALO = 0.5;
+
+// The scale factor for a joint's shell: the ball, plus its share of the width.
+export function fattenJoint(r) {
+  return (r + HALO * JOINT_HALO * r) / r;   // = 1 + HALO * JOINT_HALO
 }
 
 // How much LONGER a segment's shell is than the segment, at each end, in world
@@ -137,3 +166,83 @@ export function shellGeometry(r, radial = 12) {
 // halo, which is the bug this exists to fix.
 export const HALO_ORDER = 0.9;
 export const ROPE_ORDER = 1;
+
+// The joint halo's material: the ball, minus the parts that lie along an arm.
+//
+// See haloshape.js for why the ball cannot simply be made smaller, and for the
+// arithmetic this shader runs. In short: the ball is exactly the size needed to
+// fill the notch between two sleeves, but a sphere is that size in every
+// direction, and along an arm there is no notch to fill -- only a tube already
+// wearing its own sleeve. The ball standing proud of that sleeve is a collar,
+// and end on, where a passage recedes from the camera, the collar is a dark
+// disc nearly four times the outline the rope asked for.
+//
+// So each arm takes a cone out of the ball. The angle is not a taste: at 45
+// degrees the sleeve surface crosses the ball surface, which is exactly where
+// the collar tapers to nothing, so the cut removes the collar and nothing else.
+//
+// Each joint carries its arms as a bitmask in an instanced attribute, because
+// the joints are drawn instanced and a mask is one number where a list would be
+// several. `armMask` in haloshape.js packs it.
+//
+// The discard is in the fragment shader rather than the geometry because the
+// joints share one sphere between hundreds of instances -- that is the point of
+// instancing them -- and the cut is different for every one.
+export function jointHaloMaterial(opacity = 1) {
+  const m = haloMaterial(opacity);
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute float armMask;
+        attribute float sleeveFrac;
+        varying float vArmMask;
+        varying float vSleeveFrac;
+        varying vec3 vBallPos;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vArmMask = armMask;
+        vSleeveFrac = sleeveFrac;
+        // The position on the ball in the joint's OWN space, before the
+        // instance matrix scales it. The sphere is built at unit radius and
+        // scaled per instance, so this is already the unit sphere the
+        // arithmetic in haloshape.js is written for.
+        vBallPos = position;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying float vArmMask;
+        varying float vSleeveFrac;
+        varying vec3 vBallPos;
+
+        // Is this fragment inside the sleeve around the arm in direction a?
+        bool inSleeve(vec3 n, vec3 a, float s) {
+          float along = dot(n, a);
+          // Behind the joint as far as this arm is concerned: another arm's
+          // business, and cutting it here would punch through the far side.
+          if (along <= 0.0) return false;
+          float perp = sqrt(max(0.0, 1.0 - along * along));
+          return perp < s;
+        }`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        {
+          vec3 n = normalize(vBallPos);
+          int mask = int(vArmMask + 0.5);
+          bool cut = false;
+          // The six signed axes, in the bit order haloshape.js assigns them.
+          if ((mask & 1) != 0 && inSleeve(n, vec3( 1.0, 0.0, 0.0), vSleeveFrac)) cut = true;
+          if ((mask & 2) != 0 && inSleeve(n, vec3(-1.0, 0.0, 0.0), vSleeveFrac)) cut = true;
+          if ((mask & 4) != 0 && inSleeve(n, vec3( 0.0, 1.0, 0.0), vSleeveFrac)) cut = true;
+          if ((mask & 8) != 0 && inSleeve(n, vec3( 0.0,-1.0, 0.0), vSleeveFrac)) cut = true;
+          if ((mask & 16) != 0 && inSleeve(n, vec3( 0.0, 0.0, 1.0), vSleeveFrac)) cut = true;
+          if ((mask & 32) != 0 && inSleeve(n, vec3( 0.0, 0.0,-1.0), vSleeveFrac)) cut = true;
+          if (cut) discard;
+        }`);
+  };
+  // The cut angle travels per instance rather than as a uniform, because a
+  // junction's ball is scaled up to mark it while its arms stay the width they
+  // were -- so its sleeve is a smaller fraction of its ball than a corner's.
+  // One material, one compiled program, a different angle per joint.
+  //
+  // Three keys a material's shader program by onBeforeCompile.toString() unless
+  // told otherwise, and every joint halo shares that source, so the default key
+  // is right. Adding a unique one would leak a compiled program per rebuild.
+  return m;
+}
