@@ -12,7 +12,7 @@ export const HUD = {
   padFoot: 'menu', //kenan approved
   // Over the score in the top bar. Only on a phone, where Orange's panel is
   // not on screen to hold its own half of the score.
-  score: 'Score',
+  score: 'Score', //kenan approved
 };
 
 // The two riders. Their names appear in the HUD, on the panels and in every
@@ -24,7 +24,7 @@ export const PLAYER_NAMES = ['Cyan', 'Orange']; //kenan approved
 // attached rather than a different name, because it is the same rider: the
 // seat can be taken mid-round, and a player who beat "Orange (computer)"
 // should read the same score line they would have read beating a person.
-export const computerName = (name) => `${name} (computer)`;
+export const computerName = (name) => `${name} (computer)`; //kenan approved
 
 export const CONTROLLER = {
   // Shown while the computer is driving Orange. It has to do two jobs at once:
@@ -32,14 +32,14 @@ export const CONTROLLER = {
   // browser cannot see a controller before a button is pressed on it, so the
   // keyboard has to be offered too -- it is the only route that is certain to
   // work.
-  join: 'Orange is the computer — press IJKL or a controller to take over',
+  join: 'Press IJKL or a controller to take over for the computer on Orange', //kenan approved
   // The same fact on a phone, where there are no keys to name and no second
   // set of controls to hand over to. It is a statement rather than an
   // invitation, because on a touch screen there is nothing to accept it with.
-  soloJoin: 'Orange is the computer',
+  soloJoin: 'Orange (computer)', //kenan approved
   // Shown once a person has taken the seat and no controller is connected,
   // which means they are on the fallback keys.
-  none: 'Connect a controller to join as Orange', //kenan approved
+  none: 'Connect controller to join as Orange', //kenan approved
   some: (n) => `${n} controller${n > 1 ? 's' : ''} connected`, //kenan approved
 };
 
@@ -87,8 +87,8 @@ export const ROUND_OVER = {
   // What killed a rider, as the tail of "Orange went ___".
   cause: {
     wall: 'into the wall', //kenan approved
-    trail: "into the other rider's trail", //kenan approved
-    self: 'into their own trail', //kenan approved
+    trail: "into the other player", //kenan approved
+    self: 'into their own tail', //kenan approved
     'head-on': 'head-on', //kenan approved
   },
   // The same, as the tail of "Orange barrelled ana-ward ___". A head-on has no
@@ -96,11 +96,11 @@ export const ROUND_OVER = {
   // the two of them did to each other, and it keeps the plain sentence.
   into: {
     wall: 'into the wall', //kenan approved
-    trail: "into the other rider's trail", //kenan approved
-    self: 'into their own trail', //kenan approved
+    trail: "into the other player's tail", //kenan approved
+    self: 'into their own tail', //kenan approved
   },
   // Verb, direction, and what they hit.
-  crashed: (name, verb, ward, into) => `${name} ${verb} ${ward} ${into}`,
+  crashed: (name, verb, ward, into) => `${name} ${verb} ${ward} ${into}`, //kenan approved
   draw: 'Draw', //kenan approved
   roundWinner: (name) => `${name} wins the round`, //kenan approved
   matchWinner: (name) => `${name} wins the match`, //kenan approved

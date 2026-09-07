@@ -50,7 +50,7 @@ export const PAUSE = {
   // The on-screen button that opens the menu, for anyone without an Escape
   // key. Read by screen readers and shown on hover; the button itself is a
   // glyph.
-  button: 'Pause',
+  button: 'Pause', //kenan approved
   heading: 'Paused', //kenan approved
   resume: 'Resume', //kenan approved
   restart: 'Restart', //kenan approved
