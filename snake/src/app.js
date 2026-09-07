@@ -21,6 +21,7 @@ import { Pad, dirVec } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { Arrows } from '../../shared/warrow.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../shared/tutorial-entry.js';
@@ -537,11 +538,16 @@ const TAIL_COL = new THREE.Color(0x2a8f6a);
 const APPLE_COL = new THREE.Color(0x24ff5e);
 const PROJ_W = 0.13;
 
+let arrows = null;
+
 function buildParts() {
   if (parts) {
     for (const o of parts.group.children) if (o.geometry) o.geometry.dispose();
     world.remove(parts.group);
   }
+  // The arrows hang off parts.group, so they go with it; redraw() makes a fresh
+  // set against the new one.
+  if (arrows) { arrows.dispose(); arrows = null; }
   const group = new THREE.Group();
   group.renderOrder = 2;
 
@@ -593,6 +599,10 @@ function redraw() {
     if (o.geometry) o.geometry.dispose();
   }
   parts.dynamic = [];
+  // The arrows marking steps that leave the room. Rebuilt with everything else,
+  // but turned to face the camera every frame, so the set outlives the rebuild.
+  if (!arrows) arrows = new Arrows(parts.group);
+  arrows.clear();
 
   const body = game.body;
   const n = body.length;
@@ -640,14 +650,14 @@ function redraw() {
       const q = body[i + 1];
       const a = new THREE.Vector3(...proj(p));
       const b = new THREE.Vector3(...proj(q));
-      // A step in w joins two different frames, and so would a step across a
+      // A step in w joins two different frames, and so does a step across a
       // wrap. Neither is a length of snake lying in space, so neither is drawn
-      // as one: a thin grey line says the snake continues over there without
-      // pretending to have substance in between.
+      // as one: each end gets an arrow pointing at the other, in the snake's own
+      // colour there, so it is clear the snake continues over THAT way without
+      // anything pretending to have substance in between. See warrow.js.
       if (wOf(p) !== wOf(q) || !adjacent3(p, q)) {
-        const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
-        add(new THREE.Line(lg, new THREE.LineBasicMaterial({
-          color: 0x9aa6b8, transparent: true, opacity: 0.5 })));
+        arrows.add(a, b, col, f);
+        arrows.add(b, a, colAt(i + 1), wFade(q));
         continue;
       }
       const dir = b.clone().sub(a);
@@ -1113,6 +1123,7 @@ function render(now) {
     m.pulseApple();
   }
 
+  if (arrows) arrows.face(camera.position);
   renderer.render(scene, camera);
 }
 

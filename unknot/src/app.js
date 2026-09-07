@@ -10,6 +10,7 @@ import { PauseMenu } from '../../shared/pause.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { dropConfetti } from '../../shared/confetti.js';
 import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { Arrows } from '../../shared/warrow.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -195,6 +196,9 @@ function buildFrames() {
 
 function buildScene() {
   if (gridGroup) scene.remove(gridGroup);
+  // The arrows hang off gridGroup, so they go with it. rebuildRope() makes a
+  // fresh set against the new one.
+  if (arrows) { arrows.dispose(); arrows = null; }
   gridGroup = new THREE.Group();
   // Follow the live puzzle, so a level lifted into 4D gets the right box.
   const [X, Y, Z] = pz.dims;
@@ -381,6 +385,7 @@ function rebuildCubes() {
 // reverses the stored path -- leaves the rope looking exactly the same.
 // ---------------------------------------------------------------------------
 let rope = null;
+let arrows = null;
 
 const ROPE_A = new THREE.Color(0x37d6a0); // low end
 const ROPE_B = new THREE.Color(0xa06bff); // high end
@@ -390,6 +395,11 @@ function rebuildRope() {
     gridGroup.remove(rope.group);
     rope.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
   }
+  // The arrows marking w-steps. They sit on gridGroup with the rope and are
+  // rebuilt with it, but they are turned to face the camera every frame, so the
+  // set outlives any one rebuild and is only emptied here.
+  if (!arrows) arrows = new Arrows(gridGroup);
+  arrows.clear();
   const group = new THREE.Group();
   const n = pz.path.length;
   const TUBE = 0.115;
@@ -451,13 +461,14 @@ function rebuildRope() {
 
       // A step in w joins two different frames. Drawing it as rope would be a
       // lie -- it is not a length of strand lying in space, it is the same
-      // strand continuing in the next slice. Draw a thin grey line instead, so
-      // the continuation is visible without pretending to have substance.
+      // strand continuing in the next slice. Each end gets an arrow pointing at
+      // the other instead, in the rope's own colour so it is clear WHICH strand
+      // leaves; see shared/warrow.js.
       if (pz.path[i][viewAxes[3]] !== pz.path[i + 1][viewAxes[3]]) {
-        const lg = new THREE.BufferGeometry().setFromPoints([a, b]);
-        const lk = new THREE.Line(lg, new THREE.LineBasicMaterial({
-          color: 0x9aa6b8, transparent: true, opacity: 0.55 }));
-        group.add(lk);
+        const ca = ROPE_A.clone().lerp(ROPE_B, rampAt(pz.path, i));
+        const cb = ROPE_A.clone().lerp(ROPE_B, rampAt(pz.path, i + 1));
+        arrows.add(a, b, ca, wFade(pz.path[i]));
+        arrows.add(b, a, cb, wFade(pz.path[i + 1]));
         continue;
       }
 
@@ -918,6 +929,7 @@ function render(now) {
     props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t - t0, camera);
   }
 
+  if (arrows) arrows.face(camera.position);
   renderer.render(scene, camera);
   if (minimap) { syncMinimap(); minimap.draw(t); }
 }

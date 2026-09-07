@@ -30,12 +30,12 @@ export const HUD = {
 
 export const FOURTH = {
   // Shown the first time the player stands at a junction with a w passage.
-  // Deliberately about what is on screen -- a stub of rope that stops -- rather
-  // than about dimensions in the abstract.
-  firstSight: 'That short stub of rope goes nowhere you can see. It leaves ' +
-              'this slice entirely. Take it and the whole map changes.',
+  // Deliberately about what is on screen -- an arrow pointing off at nothing --
+  // rather than about dimensions in the abstract.
+  firstSight: 'That arrow points at a passage you cannot see. It leaves this ' +
+              'slice entirely. Take it and the whole map changes.',
   // The label on such a passage in the legend beside the board.
-  legend: 'a way out of this slice',
+  legend: 'an arrow: a way out of this slice',
   // And the other mark worth explaining: the places where you have to choose.
   legendJunction: 'a place to choose',
 };

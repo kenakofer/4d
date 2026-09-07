@@ -34,6 +34,7 @@ import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 import { haloMaterial, fatten, overshoot, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
+import { Arrows } from '../../shared/warrow.js';
 import { key, step } from '../../shared/grid.js';
 import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
 
@@ -60,7 +61,6 @@ let gridGroup, frames, ropeGroup;
 const NEAR = new THREE.Color(0x37d6a0);   // close to the exit
 const FAR = new THREE.Color(0xa06bff);    // far from it
 const JUNCTION = new THREE.Color(0xffd166);
-const W_STUB = new THREE.Color(0x9aa6b8);
 
 const TUBE = 0.115;
 
@@ -75,7 +75,6 @@ function writeLabels() {
   document.getElementById('legendJunction').textContent = FOURTH.legendJunction;
   document.getElementById('legendW').textContent = FOURTH.legend;
   document.getElementById('swJunction').style.background = '#' + JUNCTION.getHexString();
-  document.getElementById('swW').style.background = '#' + W_STUB.getHexString();
 }
 
 function ring() {
@@ -289,16 +288,17 @@ function buildFrames() {
 // The rope, and the dark shells that make it read where it crosses itself. A
 // maze crosses itself constantly -- that is what a maze IS -- so the halo
 // matters more here than anywhere, and like the rope it has to be instanced.
-let segMesh = null, jointMesh = null, wLines = null;
+let segMesh = null, jointMesh = null;
 let segHalo = null, jointHalo = null;
+let arrows = null;
 
 function rebuildRope() {
-  for (const m of [segMesh, jointMesh, wLines, segHalo, jointHalo]) {
+  for (const m of [segMesh, jointMesh, segHalo, jointHalo]) {
     if (!m) continue;
     ropeGroup.remove(m);
     m.geometry.dispose();
   }
-  segMesh = jointMesh = wLines = segHalo = jointHalo = null;
+  segMesh = jointMesh = segHalo = jointHalo = null;
   if (!maze) return;
 
   const axisOf = (a, b) => Maze.axisOf(a, b);
@@ -407,15 +407,22 @@ function rebuildRope() {
   ropeGroup.add(jointHalo, jointMesh);
 
   // --- the passages that leave the slice -----------------------------------
-  const pts = [];
+  //
+  // Two arrows per passage, one in each frame, pointing at each other. This is
+  // the game with most to gain from that: a maze has a way out of the slice at
+  // a large fraction of its cells, and drawn as lines between frames they were
+  // a grey cobweb laid over the whole board. An arrow beside its own cell says
+  // the same thing without crossing anything.
+  //
+  // They take the cell's own distance colour rather than a colour of their own,
+  // so a way out is read exactly like every other passage: how far it leaves
+  // you from the exit. The arrowhead is what says it leaves the slice.
+  if (!arrows) arrows = new Arrows(ropeGroup);
+  arrows.clear();
   for (const [a, b] of hops) {
-    pts.push(new THREE.Vector3(...proj(a)), new THREE.Vector3(...proj(b)));
-  }
-  if (pts.length) {
-    wLines = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color: W_STUB, transparent: true, opacity: 0.55 }));
-    ropeGroup.add(wLines);
+    const va = new THREE.Vector3(...proj(a)), vb = new THREE.Vector3(...proj(b));
+    arrows.add(va, vb, colourAt(a));
+    arrows.add(vb, va, colourAt(b));
   }
 }
 
@@ -481,6 +488,7 @@ function frame(t) {
     props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t / 1000, camera);
   }
   if (panels && maze) panels.draw(at.split(',').map(Number));
+  if (arrows) arrows.face(camera.position);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
