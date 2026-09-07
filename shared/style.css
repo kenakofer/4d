@@ -211,7 +211,14 @@ button:hover, select:hover { border-color: var(--accent); }
 #pauseBtn {
   position: fixed; top: 14px; right: 14px; z-index: 20;
   width: 36px; height: 36px; padding: 0 0 1px; border-radius: 9px;
-  font-size: 11px; letter-spacing: -1px; color: var(--dim);
+  /* The glyph is two separate bars, and they have to READ as two. Negative
+     tracking used to close the gap between them until, on a phone's pixel
+     density, they merged into one block that looked like a stop button rather
+     than a pause. The gap is the whole difference between the two symbols, so
+     it gets positive tracking: enough to survive rounding to a whole pixel.
+     `text-indent` puts back the centring the trailing space would otherwise
+     throw off. */
+  font-size: 11px; letter-spacing: 2px; text-indent: 2px; color: var(--dim);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   border: 1px solid var(--line); backdrop-filter: blur(8px);
   user-select: none;

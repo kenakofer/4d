@@ -22,8 +22,16 @@
 // The range between them is the whole effect. Too narrow and the marbling is a
 // flat slab; too wide and the table starts glowing and competing with the board
 // it is supposed to sit behind.
-export const LO = [0.013, 0.017, 0.026];
-export const HI = [0.030, 0.037, 0.050];
+// Raised once, after the table turned out to be hard to pick out from the sky
+// on a real screen. The two moved by different amounts, because they do
+// different jobs: LO is the table's own darkness, and it only had to clear the
+// background enough to read as an object -- sRGB 30 to 34, against a
+// background of 14,17,22. HI is the veining, which had to become findable at a
+// glance rather than only on a rested eye, so it went further, 48 to 58. The
+// swing between them is what the marbling has to work with, and widening it
+// from 18 sRGB steps to 24 is most of what makes the pattern legible.
+export const LO = [0.016, 0.021, 0.031];
+export const HI = [0.042, 0.051, 0.068];
 
 // How many times the baked tile repeats across the table's width. This is the
 // density knob: raise it for finer veining.

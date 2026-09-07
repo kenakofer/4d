@@ -106,6 +106,7 @@ export class Table {
     this.group.renderOrder = -1;
     this.mesh = null;
     this.rim = null;
+    this.rimOuter = null;
     this.depth = 1;
     this.shownSides = null;
 
@@ -116,7 +117,10 @@ export class Table {
     this.slabMaterial = new THREE.MeshLambertMaterial({
       // Near black, but not the background's black: it has to read as a
       // surface catching a little light rather than as a hole in the scene.
-      color: 0x05070a,
+      // Lifted with the top surface -- the slab is the table's thickness seen
+      // edge-on, and leaving it at the old near-background value while the top
+      // got lighter would have read as a lit sheet floating over nothing.
+      color: 0x090d13,
       emissive: 0x000000,
     });
     this.topMaterial = new THREE.MeshLambertMaterial({
@@ -131,7 +135,19 @@ export class Table {
       stencilFunc: THREE.AlwaysStencilFunc,
       stencilZPass: THREE.ReplaceStencilOp,
     });
-    this.rimMaterial = new THREE.LineBasicMaterial({ color: 0x1d2735 });
+    // The rim is the table's silhouette, so it is the line that actually says
+    // where the table stops and the sky starts. Lighter than the stone by a
+    // clear margin, since it is one pixel wide and a one-pixel line at the
+    // surface's own value disappears.
+    this.rimMaterial = new THREE.LineBasicMaterial({ color: 0x2b374a });
+    // And a second, dimmer copy drawn a hair outside the first -- see
+    // `rimGeometry`. `linewidth` is the obvious way to thicken a line and it
+    // does nothing: every WebGL renderer ignores it and draws one pixel, and
+    // three's fat-line replacement lives in the addons bundle, which nothing
+    // here loads. Two lines a fraction apart land on neighbouring pixels and
+    // read as one thicker edge. The outer one is dimmer so the pair reads as a
+    // line with a soft outside rather than as two lines.
+    this.rimOuterMaterial = new THREE.LineBasicMaterial({ color: 0x212b3a });
 
     // The marbled face, a hair above the slab's own top so it wins the depth
     // test rather than z-fighting it. Built once: the grid's topology never
@@ -249,9 +265,14 @@ export class Table {
     // table's own parts go; things that ride along live in `attached`, which
     // is never cleared -- the orbs were once parented here and vanished on the
     // first change of shape.
-    for (const o of [this.mesh, this.rim]) {
+    // The two rim passes SHARE one edge geometry, so it is disposed once --
+    // hence the set rather than a straight walk of the list.
+    const freed = new Set();
+    for (const o of [this.mesh, this.rim, this.rimOuter]) {
       if (!o) continue;
       this.group.remove(o);
+      if (freed.has(o.geometry)) continue;
+      freed.add(o.geometry);
       o.geometry.dispose();
     }
 
@@ -280,7 +301,29 @@ export class Table {
 
     // An edge, so the silhouette is legible: an unlit black slab on a black
     // ground would transform invisibly.
-    this.rim = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 15), this.rimMaterial);
+    //
+    // Two passes over one edge set, for the thickness -- see rimOuterMaterial.
+    // The outer copy is scaled about the table's centre, which is what puts it
+    // OUTSIDE the inner one all the way round whatever shape the table
+    // currently is.
+    //
+    // The factor is set in SCREEN pixels, since that is the only place the
+    // effect exists. The table is around nine units of inradius and fills
+    // roughly the viewport's width, which is about 67 pixels to the unit, so
+    // this is a offset of ~0.02 units -- a little over one pixel at the rim.
+    // A first attempt at 1.0007 was a third of that and did nothing visible:
+    // both lines rounded onto the same pixel, which is a second draw call for
+    // no thickness at all. Much beyond this and the gap opens up and the pair
+    // reads as two lines with a dark seam instead of one thick one.
+    //
+    // Only in y is it left alone: scaling the table's THICKNESS would lift the
+    // outer line off the slab's top and bottom faces.
+    const edges = new THREE.EdgesGeometry(geo, 15);
+    this.rimOuter = new THREE.LineSegments(edges, this.rimOuterMaterial);
+    this.rimOuter.scale.set(1.002, 1, 1.002);
+    this.group.add(this.rimOuter);
+
+    this.rim = new THREE.LineSegments(edges, this.rimMaterial);
     this.group.add(this.rim);
   }
 
