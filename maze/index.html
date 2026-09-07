@@ -4,8 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Maze</title>
-<link rel="stylesheet" href="../shared/style.css?v=19">
+<link rel="stylesheet" href="../shared/style.css?v=20">
 <style>
+  /* The shared sheet sizes #mapPanel for unknot's one wide diagram. Two square
+     slices side by side set their own width. */
+  #mapPanel { width: auto; }
+
   /* The maze's own furniture: a legend for what the rope is doing.
 
      Unknot's rope is one strand and needs no key -- there is nothing to
@@ -26,11 +30,6 @@
   <h1 id="title">—</h1>
   <p id="blurb"></p>
   <div id="status"></div>
-  <div class="padhead" id="padHeading"></div>
-  <div id="pad"></div>
-  <div class="padfoot">
-    <span><kbd>shift</kbd><span id="rotateHint"></span></span>
-  </div>
   <div class="legend">
     <div><span class="swatch" id="swJunction"></span><span id="legendJunction"></span></div>
     <div><span class="swatch" id="swW"></span><span id="legendW"></span></div>
@@ -40,8 +39,21 @@
   </div>
 </div>
 
-<div class="panel" id="mapPanel">
-  <svg id="minimap" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg>
+<!-- Two slices through where the player stands, side by side, each with the
+     keys that move in its plane directly above it. The layout, the columns and
+     the phone rules are shared furniture -- see .mapcols in shared/style.css
+     and shared/slicepanels.js. -->
+<div class="panel mapcols" id="mapPanel">
+  <div class="mapcol">
+    <div class="padcluster" id="padVertical"></div>
+    <svg id="mapWY" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="mapfoot" id="mapWYFoot"></div>
+  </div>
+  <div class="mapcol">
+    <div class="padcluster" id="padHorizontal"></div>
+    <svg id="mapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="mapfoot" id="mapXZFoot"></div>
+  </div>
 </div>
 
 <script type="module" src="./src/app.js"></script>

@@ -28,15 +28,15 @@ import { jointRadius, needsJoint, junctionKind, axesAt } from '../../shared/junc
 import { Ring, Slide } from '../../shared/ring.js';
 import { Orbit } from '../../shared/orbit.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
-import { Pad, KEYMAP, dirVec, DIRECTIONS } from '../../shared/pad.js';
+import { KEYMAP, dirVec } from '../../shared/pad.js';
+import { SlicePanels } from '../../shared/slicepanels.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
-import { SliceMap } from '../../shared/slicemap.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 import { key, step } from '../../shared/grid.js';
-import { HUD, FOURTH, WON, PANELS } from './copy.js';
+import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
 
-let scene, camera, renderer, orbit, props, pad, pause, map, gamepads;
+let scene, camera, renderer, orbit, props, panels, pause, gamepads;
 let maze = null, dims = DEFAULTS.dims.slice();
 let at = null;            // where the player stands, as a key
 let exit = null;          // the cell to reach
@@ -131,7 +131,7 @@ function newMaze() {
   // A new maze changes every one of them, so without this the buttons keep
   // describing the maze before it -- showing a way out that is not there and
   // greying out the one that is.
-  if (pad) pad.update();
+  if (panels) panels.update();
 }
 
 function init() {
@@ -172,28 +172,58 @@ function init() {
   camera.position.set(...orbit.position());
   camera.lookAt(...orbit.target);
 
-  buildPad();
   pause = new PauseMenu({ onRestart: newMaze });
-  // A plan view of the slice the player stands in: x across, z down, which is
-  // the same plane and the same orientation Snake's panel uses. The maze's own
-  // marks go on through `cellFill` below.
-  map = new SliceMap(document.getElementById('minimap'), {
-    axes: [0, 2], dims, flipV: true,
+  // The two slice panels and the split pad that goes with them, all shared
+  // furniture. What stays here is only what the panels DRAW.
+  panels = new SlicePanels({
+    columns: [
+      { cluster: document.getElementById('padVertical'),
+        svg: document.getElementById('mapWY'),
+        foot: document.getElementById('mapWYFoot') },
+      { cluster: document.getElementById('padHorizontal'),
+        svg: document.getElementById('mapXZ'),
+        foot: document.getElementById('mapXZFoot') },
+    ],
+    dims,
+    axisName: (ax) => AXIS_NAME[ax],
+    copy: PANELS,
+    onPush: (axis, sign) => tryMove(axis, sign),
+    // Grey out a direction with no passage behind it. The pad is the one place
+    // that can say "there is no way that way" before the player spends a press
+    // finding out -- in a maze drawn as passages an illegal move is not a
+    // crash, it is simply nothing happening, and nothing happening is the least
+    // readable feedback there is.
+    isLive: (axis, sign) => {
+      if (!maze || won) return false;
+      const np = step(at.split(',').map(Number), dirVec(axis, sign, dims.length),
+                      dims, []);
+      return !!np && maze.neighbours(at).includes(key(np));
+    },
+    isPresent: (axis) => axis < dims.length && dims[axis] > 1,
   });
-  // The panel draws a cell as filled when a passage runs through it. Colour
-  // follows the same near-far ramp as the rope, so the map and the room agree
-  // about which way is downhill.
-  map.cellFill = (p) => {
-    const k = key(p);
-    if (!maze || !maze.has(k)) return null;
-    const maxDist = Math.max(1, ...[...toExit.values()]);
-    const d = toExit.has(k) ? toExit.get(k) : maxDist;
-    const col = NEAR.clone().lerp(FAR, d / maxDist);
-    return { colour: '#' + col.getHexString(),
-             opacity: maze.degree(k) >= 3 ? 0.95 : 0.6 };
-  };
-  // A controller reports through a callback rather than a return value, so the
-  // press is handled where it happens; the loop only has to poll.
+  panels.configure((m) => {
+    // A cell is filled when a passage runs through it, coloured by the same
+    // near-far ramp as the rope so the panel and the room agree about which way
+    // is downhill.
+    m.cellFill = (p) => {
+      const k = key(p);
+      if (!maze || !maze.has(k)) return null;
+      const maxDist = Math.max(1, ...[...toExit.values()]);
+      const d = toExit.has(k) ? toExit.get(k) : maxDist;
+      return { colour: '#' + NEAR.clone().lerp(FAR, d / maxDist).getHexString(),
+               opacity: 0.85 };
+    };
+    // And this is what makes the panel tell the truth about a maze.
+    //
+    // Two cells side by side on the panel are not necessarily connected: the
+    // passage between them may simply not exist. Drawn as one merged blob --
+    // which is what the panel does for terrain, correctly, since a slab of lava
+    // IS one region -- it says the player can walk from one to the other, which
+    // is the exact question the panel is there to answer.
+    m.joined = (a, b) => !!maze && maze.neighbours(key(a)).includes(key(b));
+  });
+  panels.fit();
+
   gamepads = new Gamepads({ onPress: (axis, sign) => tryMove(axis, sign) });
 
   addEventListener('keydown', onKey);
@@ -381,24 +411,7 @@ function tryMove(axis, sign) {
   updateHud();
   // Which directions are open changed with the step, and the pad only
   // re-reads `isLive` when it is told to.
-  if (pad) pad.update();
-}
-
-function buildPad() {
-  pad = new Pad(document.getElementById('pad'), {
-    onPush: (axis, sign) => tryMove(axis, sign),
-    // Grey out a direction with no passage behind it. The pad is the one place
-    // that can say "there is no way that way" before the player spends a press
-    // finding out -- in a maze drawn as passages, an illegal move is not a
-    // crash, it is simply nothing happening, and nothing happening is the least
-    // readable feedback there is.
-    isLive: (axis, sign) => {
-      if (!maze || won) return false;
-      const np = step(at.split(',').map(Number), dirVec(axis, sign, dims.length),
-                      dims, []);
-      return !!np && maze.neighbours(at).includes(key(np));
-    },
-  });
+  if (panels) panels.update();
 }
 
 function onKey(e) {
@@ -438,10 +451,7 @@ function frame(t) {
   if (props && orbit) {
     props.update(slide.shown, orbit.az - Orbit.AZ0, orbit.rockYaw, t / 1000, camera);
   }
-  if (map && maze) {
-    map.focus = at.split(',').map(Number);
-    map.draw();
-  }
+  if (panels && maze) panels.draw(at.split(',').map(Number));
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Tron</title>
-<link rel="stylesheet" href="../shared/style.css?v=18">
+<link rel="stylesheet" href="../shared/style.css?v=20">
 <style>
   /* Tron's own furniture: a panel per player, and a match bar.
 
@@ -40,13 +40,13 @@
      panel can only draw two of the four axes, so half of every turn had
      nowhere to appear -- the second panel is what makes a move along x or z
      visible at all. They sit side by side and share the panel's width. */
-  .maps { display: flex; gap: 10px; }
-  .mapcol { display: flex; flex-direction: column; }
-  /* Sized like Snake's, near enough. A panel is read at a glance while a clock
-     runs, and one too small to read at a glance is not a smaller version of
-     the same thing -- it is decoration. Two of them side by side is what sets
-     the width of the whole player panel, rather than the maps being squeezed
-     into a width picked before there were two. */
+  /* The columns and their phone rules are shared furniture: see .mapcols in
+     shared/style.css. Tron's own departure is the SIZE -- two panels per player
+     and two players on screen, so they are a little smaller than the shared
+     default. A panel is read at a glance while a clock runs, and one too small
+     to read at a glance is not a smaller version of the same thing, it is
+     decoration; 150 is as far down as that goes. */
+  .maps { gap: 10px; }
   .player svg { display: block; width: 150px; height: 150px; }
   /* The pad is a touch control and a legend. On a desktop the keys are printed
      under the panel already, so it only takes up room -- it appears at the
@@ -125,18 +125,8 @@
        bottom, where the thumbs are, rather than tucked in a corner. */
     #p0 { left: 8px; right: 8px; bottom: 8px; width: auto;
           display: flex; flex-direction: column; align-items: center; }
-    .maps { gap: 8px; justify-content: center; }
-
-    /* On a touch screen the BUTTONS set the width, not the maps: 44px is the
-       size a thumb hits without aiming, so each cluster gets three of those
-       and the map above takes the same width. */
-    .mapcol { width: 138px; flex: 0 0 auto; }
-    /* One player on screen now, so there is room for Snake's own phone size. */
+    /* One player on screen now, so there is room for the shared phone size. */
     .player svg { width: 138px; height: 138px; }
-    /* The keys go BELOW the map they belong to: at the bottom of the screen
-       the lowest thing is the nearest thing. */
-    .mapcol { flex-direction: column-reverse; }
-    .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
     .padcluster { display: grid; }
     .padbtn { padding: 12px 0 10px; }
     .padbtn .glyph { font-size: 18px; }
@@ -162,7 +152,7 @@
     <span class="pstate" id="state0"></span>
     <span class="pwins" id="wins0">0</span>
   </div>
-  <div class="maps">
+  <div class="maps mapcols">
     <div class="mapcol">
       <div class="padcluster" id="padVertical"></div>
       <svg id="map0" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
@@ -186,7 +176,7 @@
     <span class="pstate" id="state1"></span>
     <span class="pwins" id="wins1">0</span>
   </div>
-  <div class="maps">
+  <div class="maps mapcols">
     <svg id="map1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
     <svg id="plan1" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
   </div>

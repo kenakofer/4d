@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Snake</title>
-<link rel="stylesheet" href="../shared/style.css?v=18">
+<link rel="stylesheet" href="../shared/style.css?v=20">
 <style>
   /* Snake's own furniture: a score readout. Everything else -- the pad, the
      panel, the game-over card, the axis colours -- comes from the shared
@@ -21,30 +21,11 @@
   /* Each panel's footer names the two axes it is holding still, which is the
      only thing that distinguishes one from the other -- so it is the label,
      and there is no heading above them repeating what both are. */
-  .mapfoot { font-size: 10px; color: var(--dim); margin-top: 4px;
-             text-align: center; }
-  .mapfoot b { color: var(--ink); font-weight: 600; }
-  /* Space between the pair, so they read as two panels rather than one tall
-     one. The first footer does the separating. */
 
-  /* The shared sheet sizes the map panel for unknot's wide knot diagram. A
-     slice of a cube is square, so this one is too -- and a little larger,
-     since every cell in it is a place the snake can be and wants to be
-     clickable-sized to the eye. */
-  /* The two columns sit side by side, each holding the keys for its plane
-     above the panel that draws that plane. */
-  #mapPanel { display: flex; gap: 14px; width: auto; }
-  .mapcol { display: flex; flex-direction: column; }
-  .mapcol .padcluster { margin-bottom: 8px; }
-  /* Must out-specify the rule above, or the gap survives the collapse and the
-     panels stop short of the space the pad gave back. */
-  .mapcol .padcluster.taught { margin-bottom: 0; }
-  /* A column for an axis the board does not have is not shown at all. Its
-     PANEL can go while the keys above it stay, which is what a 3D board wants:
-     W and S exist there, the w-y plane does not. */
-  .mapcol.absent { display: none; }
-  #mapPanel svg.absent, .mapfoot.absent { display: none; }
-  #mapPanel svg { display: block; width: 178px; height: 178px; }
+  /* The double slice panel -- the columns, their sizes and the phone rules --
+     is shared furniture now: see .mapcols in shared/style.css. The panel only
+     has to stop taking unknot's single-diagram width. */
+  #mapPanel { width: auto; }
 
   /* The restart button names the key first and what it does underneath, so the
      answer to "how do I play again" is the thing you read, not something you
@@ -88,11 +69,6 @@
     /* Clear of the pause button in the corner. */
     #hud { top: 8px; bottom: auto; right: 52px; }
 
-    /* And within each column, the keys go below the map they belong to: at the
-       bottom of the screen the lowest thing is the nearest thing. */
-    .mapcol { width: 138px; flex-direction: column-reverse; }
-    .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
-    #mapPanel svg { width: 138px; height: 138px; }
     .padbtn { padding: 12px 0 10px; }
     .padbtn .glyph { font-size: 18px; }
   }
@@ -122,7 +98,7 @@
      x-z panel for the same reason. The cluster IS the legend, so the panels
      need no axis labels round their edges -- the key that moves you that way is
      already there, in the right place, in the right colour. -->
-<div class="panel" id="mapPanel">
+<div class="panel mapcols" id="mapPanel">
   <div class="mapcol">
     <div class="padcluster" id="padVertical"></div>
     <svg id="mapWY" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>

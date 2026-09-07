@@ -55,6 +55,12 @@ export const WON = {
   playAgain: 'Another maze',
 };
 
+// What each axis is called in a panel footer. Single letters, because the
+// footer is a caption under a small square and a word would not fit -- and
+// because x, y, z and w are what the axes are called everywhere else in these
+// games, including in the prose that teaches them.
+export const AXIS_NAME = ['x', 'y', 'z', 'w'];
+
 // The slice panels' footers, naming the axes each one holds still. Worded
 // exactly as Snake's are: a player who reads one should not have to learn a
 // second phrasing for the same idea.

@@ -626,5 +626,97 @@ console.log('\nmaze: the view refers to things that exist');
   ok('the view actually reads its copy file', wanted.length > 3);
 }
 
+// ---------------------------------------------------------------------------
+// What the slice panels must show.
+//
+// The panel draws a cross-section, and the player uses it to decide where to
+// step. So the shapes on it have to follow the PASSAGES, not the grid: two
+// cells side by side with no passage between them must be drawn apart, or the
+// panel says there is a way through where there is none. That is the one thing
+// a maze panel must not get wrong, and it is the default behaviour for terrain
+// -- a slab of lava is one region and merging its cells is right -- so the
+// maze has to ask for the other rule explicitly.
+//
+// SliceMap itself cannot be loaded here (it builds SVG through the DOM), so
+// what is checked is the rule the view hands it: `joined`, and the count of
+// connected pieces it implies.
+// ---------------------------------------------------------------------------
+console.log('\nmaze: what the slice panels must show');
+
+{
+  const { maze } = generate({ seed: 11 });
+  const dims = DEFAULTS.dims;
+  // The predicate the view gives the panel.
+  const joined = (a, b) => maze.neighbours(key(a)).includes(key(b));
+
+  // Pieces within one slice, joined only through passages lying IN that slice.
+  const piecesIn = (focus, H, V, useJoined) => {
+    const cells = maze.cells.map((k) => k.split(',').map(Number))
+      .filter((p) => p.every((c, i) => (i === H || i === V) || c === focus[i]));
+    const ks = new Set(cells.map((p) => key(p)));
+    const seen = new Set();
+    let pieces = 0;
+    for (const c of cells) {
+      if (seen.has(key(c))) continue;
+      pieces++;
+      const stack = [c];
+      seen.add(key(c));
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const [ax, d] of [[H, 1], [H, -1], [V, 1], [V, -1]]) {
+          const n = cur.slice();
+          n[ax] += d;
+          const nk = key(n);
+          if (!ks.has(nk) || seen.has(nk)) continue;
+          // The whole difference: by grid adjacency, or by real passages.
+          if (useJoined && !joined(cur, n)) continue;
+          seen.add(nk);
+          stack.push(n);
+        }
+      }
+    }
+    return { cells: cells.length, pieces };
+  };
+
+  const focus = maze.cells[0].split(',').map(Number);
+  let anySplit = false, everMerged = false;
+  for (const [H, V] of [[3, 1], [0, 2]]) {
+    const real = piecesIn(focus, H, V, true);
+    const naive = piecesIn(focus, H, V, false);
+    ok(`a panel's shapes follow passages, not the grid (${H}-${V})`,
+       real.pieces >= naive.pieces,
+       `${real.pieces} by passage vs ${naive.pieces} by adjacency`);
+    if (real.pieces > naive.pieces) anySplit = true;
+    if (real.cells > real.pieces) everMerged = true;
+  }
+  ok('drawing by adjacency really would merge things that are not connected',
+     anySplit, 'the two rules agreed everywhere, so this proves nothing');
+  ok('cells joined by a passage are still drawn as one shape', everMerged,
+     'every cell came out separate, which would draw no corridors at all');
+
+  // The predicate itself, which is the thing actually handed to the panel.
+  const a = maze.cells.find((k) => maze.degree(k) >= 1);
+  const b = maze.neighbours(a)[0];
+  ok('joined says yes to a real passage',
+     joined(a.split(',').map(Number), b.split(',').map(Number)));
+  // A neighbouring cell on the grid that is NOT a passage.
+  const p = a.split(',').map(Number);
+  let sawWall = false;
+  for (let ax = 0; ax < dims.length && !sawWall; ax++) {
+    for (const d of [1, -1]) {
+      const q = p.slice();
+      q[ax] += d;
+      if (q[ax] < 0 || q[ax] >= dims[ax]) continue;
+      if (!maze.has(key(q))) continue;
+      if (joined(p, q)) continue;
+      sawWall = true;
+      ok('joined says no to two cells with a wall between them', true);
+      break;
+    }
+  }
+  ok('a wall between neighbouring cells exists to be tested', sawWall,
+     'no such pair found, so the negative case went unchecked');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

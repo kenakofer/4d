@@ -386,3 +386,56 @@ button:hover, select:hover { border-color: var(--accent); }
   position: fixed; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 28;
 }
+
+/* ---------------------------------------------------------------------------
+   The double slice panel.
+
+   Two cross-sections side by side, each with the key cluster that moves in its
+   plane directly above it. That pairing is the whole layout: WASD sits over the
+   w-y panel because those are the keys that move in the w-y plane, and the
+   arrows sit over the x-z panel for the same reason. The cluster IS the legend,
+   so the panels need no axis labels round their edges -- the key that moves you
+   that way is already there, in the right place and the right colour.
+
+   This lived twice, once in Snake's page and once in Tron's, and the two copies
+   had already drifted: Snake hung it on `#mapPanel`, Tron on `.maps`, and their
+   phone rules were separately maintained versions of the same idea. Any game
+   with four axes wants this same furniture, so it belongs here and the pages
+   ask for it by class.
+   --------------------------------------------------------------------------- */
+
+/* The row of columns. A game puts this on whatever element holds the pair --
+   its own panel, or a player's half of the screen. */
+.mapcols { display: flex; gap: 14px; }
+
+/* One column: the keys for a plane, above the panel drawing that plane. */
+.mapcol { display: flex; flex-direction: column; }
+.mapcol .padcluster { margin-bottom: 8px; }
+/* Must out-specify the rule above, or the gap survives the pad's collapse and
+   the panels stop short of the space it gave back. */
+.mapcol .padcluster.taught { margin-bottom: 0; }
+
+/* A column for an axis the board does not have is not shown at all. Its PANEL
+   can go while the keys above it stay, which is what a 3D board wants: W and S
+   exist there, the w-y plane does not. */
+.mapcol.absent, .mapcols svg.absent, .mapfoot.absent { display: none; }
+
+.mapcols svg { display: block; width: 178px; height: 178px; }
+
+/* What each panel is holding still, under the panel it applies to. */
+.mapfoot { font-size: 10px; color: var(--dim); margin-top: 4px;
+           text-align: center; }
+.mapfoot b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 720px), (pointer: coarse) {
+  /* On a touch screen the BUTTONS set the width, not the maps: 44px is the size
+     a thumb hits without aiming, so each cluster gets three of those and the map
+     above takes the same width. */
+  .mapcols { gap: 8px; justify-content: center; }
+  .mapcol { width: 138px; flex: 0 0 auto; }
+  .mapcols svg { width: 138px; height: 138px; }
+  /* And within each column the keys go BELOW the map they belong to: at the
+     bottom of the screen the lowest thing is the nearest thing. */
+  .mapcol { flex-direction: column-reverse; }
+  .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
+}
