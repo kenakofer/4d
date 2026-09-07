@@ -92,13 +92,15 @@ export const TUTORIAL = {
       title: 'Well done. Now Snake in 3D', //kenan approved
       blurb: 'Snake can float obviously', //kenan approved
       text: 'Let\'s add two more keys: <b>W</b> and <b>S</b> move up and ' + //kenan approved
-            'down. The minimap gives a top-down perspective.', //kenan approved
+            'down. The minimap gives a top-down perspective. Your shadow ' + //kenan approved
+            'on the wall can help too.', //kenan approved
     },
     {
-      title: 'And with a strenuous rearrangement of the parietal lobe…',
+      title: 'And with a strenuous rearrangement of the parietal lobe…', //kenan approved
       blurb: '',
-      text: 'Two last keys: <b>A</b> and <b>D</b> move <b>kata</b> and ' +
-            '<b>ana</b>, along a fourth dimension.' //kenan approved
+      text: 'Two last keys: <b>A</b> and <b>D</b> move <b>kata</b> and ' + //kenan approved
+            '<b>ana</b>, along a fourth dimension. What\'s that second ' + //kenan approved
+            'minimap for?', //kenan approved
     },
   ],
 
