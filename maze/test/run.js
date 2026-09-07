@@ -13,6 +13,8 @@
 // fail here and be looked at, not to pass quietly.
 import { generate, prune, stats, distances, diameter, components, Maze, DEFAULTS }
   from '../src/maze.js';
+import { jointRadius, needsJoint, junctionKind, axesAt }
+  from '../../shared/junction.js';
 import { key } from '../../shared/grid.js';
 
 let pass = 0, fail = 0;
@@ -463,6 +465,165 @@ console.log('\nmaze: reading the graph');
      `${st.edges} edges, ${st.size} cells`);
   ok('stats splits passages by axis',
      st.edgesByAxis.reduce((a, b) => a + b, 0) === st.edges);
+}
+
+// ---------------------------------------------------------------------------
+// Junctions: the shape of a place where passages meet.
+//
+// Unknot draws a path, so it never joints more than two segments. A maze is a
+// graph and can meet four at a cell, which is what these are about.
+// ---------------------------------------------------------------------------
+console.log('\njunction: the shape where passages meet');
+
+{
+  const T = 0.115;
+  ok('a straight run gets a joint no wider than the tube',
+     jointRadius(T, 1) === T, `${jointRadius(T, 1)}`);
+  ok('a bend gets one that reaches the seam',
+     Math.abs(jointRadius(T, 2) - T * Math.SQRT2) < 1e-12);
+  ok('three passages want the same radius as two',
+     jointRadius(T, 3) === jointRadius(T, 2));
+  ok('and so do four',
+     jointRadius(T, 4) === jointRadius(T, 2));
+  ok('a Set of axes is accepted as well as a count',
+     jointRadius(T, new Set([0, 1, 2])) === jointRadius(T, 3));
+
+  // The check that caught the formula being wrong.
+  //
+  // The seam between tube surfaces is at r*sqrt(2) however many tubes meet --
+  // NOT r*sqrt(3) for three, which is the intuitive answer and the one that was
+  // written here first. (r,r,r) is not on any tube's surface: it stands
+  // r*sqrt(2) from each axis, which is outside a tube of radius r. So it is a
+  // point in space past the corner rather than a corner.
+  //
+  // Rather than trust that argument -- the first one was just as convincing --
+  // this measures the union of tubes directly and finds its furthest point near
+  // the vertex.
+  const inTube = (p, ax) => {
+    let s = 0;
+    for (let i = 0; i < 3; i++) if (i !== ax) s += p[i] * p[i];
+    return Math.sqrt(s) <= T;
+  };
+  const furthestSeam = (axes) => {
+    let worst = 0;
+    const N = 90, lim = T * 2;
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; j <= N; j++) {
+        for (let k = 0; k <= N; k++) {
+          const p = [-lim + 2 * lim * i / N, -lim + 2 * lim * j / N,
+                     -lim + 2 * lim * k / N];
+          // Only the neighbourhood of the vertex: further along a tube is the
+          // tube's own length, which no joint is meant to cover.
+          if (!axes.every((a) => Math.abs(p[a]) <= T)) continue;
+          if (!axes.some((a) => inTube(p, a))) continue;
+          worst = Math.max(worst, Math.hypot(...p));
+        }
+      }
+    }
+    return worst;
+  };
+  for (const axes of [[0, 1], [0, 1, 2]]) {
+    const seam = furthestSeam(axes);
+    const r = jointRadius(T, axes.length);
+    ok(`the joint covers the seam where ${axes.length} tubes meet`,
+       r + 0.004 >= seam, `seam ${seam.toFixed(4)}, joint ${r.toFixed(4)}`);
+  }
+  // And it must not swallow the passages it joins: a sphere reaching the
+  // neighbouring cell would close the maze up into blobs.
+  ok('the joint stays well inside its own cell', jointRadius(T, 4) < 0.5,
+     `${jointRadius(T, 4)}`);
+
+  // The view draws a junction's joint larger than the geometry needs, to mark
+  // it. How much larger is a judgement, but there is a limit that is not: a
+  // mark wider than the gap between two cells touches its neighbours, and the
+  // maze stops reading as passages and starts reading as a heap of beads. It
+  // was first drawn at 1.9x, which did exactly that.
+  const MARK = 1.25;
+  ok('a junction mark stays smaller than the gap it sits in',
+     jointRadius(T, 3) * MARK < 0.5,
+     `${(jointRadius(T, 3) * MARK).toFixed(3)} against a half-cell of 0.5`);
+  ok('a junction mark is still wider than the passage it interrupts',
+     jointRadius(T, 3) * MARK > T,
+     'a mark no wider than the tube would not be a mark');
+}
+
+{
+  ok('a cell the passage runs straight through needs no joint',
+     needsJoint(2, 1) === false);
+  ok('a bend needs one', needsJoint(2, 2) === true);
+  ok('a dead end is capped', needsJoint(1, 1) === true);
+  ok('a three-way needs one', needsJoint(3, 2) === true);
+  // Four passages on two axes is a crossing, not a straight run: it has four
+  // notches between the arms even though each pair of opposite arms is flush.
+  ok('a crossing needs one', needsJoint(4, 2) === true);
+  ok('a lone cell is drawn as something', needsJoint(0, 0) === true);
+}
+
+{
+  ok('a through-cell is named as one', junctionKind(2, 1) === 'through');
+  ok('a corner is named as one', junctionKind(2, 2) === 'corner');
+  ok('a dead end is named as one', junctionKind(1, 1) === 'end');
+  ok('three ways out is a junction', junctionKind(3, 3) === 'junction');
+  ok('four ways out is a junction', junctionKind(4, 2) === 'junction');
+}
+
+{
+  // axesAt reads the axes off the neighbours, which is how the renderer gets
+  // the count it feeds to everything above.
+  const axisOf = (a, b) => Maze.axisOf(a, b);
+  const at = '2,2,2,2';
+  const straight = axesAt(['1,2,2,2', '3,2,2,2'], at, axisOf);
+  ok('a straight run is one axis', straight.size === 1);
+  const corner = axesAt(['1,2,2,2', '2,3,2,2'], at, axisOf);
+  ok('a bend is two axes', corner.size === 2);
+  const wJunction = axesAt(['1,2,2,2', '2,3,2,2', '2,2,2,3'], at, axisOf);
+  ok('a junction into w counts w among its axes',
+     wJunction.size === 3 && wJunction.has(3));
+}
+
+// ---------------------------------------------------------------------------
+// The view's use of shared names.
+//
+// The renderer imports three.js from a CDN, so it cannot be loaded here and
+// none of the drawing can be tested directly. What CAN be checked is that the
+// names it reaches for actually exist -- read out of the source as text.
+//
+// This is here because of a real bug rather than as a formality. The scene's
+// background was set from `COLORS.sky`, and there is no `sky` in COLORS: the
+// key is `bg`. Reading a missing property gives `undefined`, THREE.Color turns
+// `undefined` into WHITE, and the game shipped with a white sky in a family of
+// games with dark ones. Nothing threw, nothing logged, and the suite was
+// entirely green -- the only evidence was a screenshot looking wrong.
+// ---------------------------------------------------------------------------
+console.log('\nmaze: the view refers to things that exist');
+
+{
+  const fs = await import('node:fs');
+  const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
+  const app = read('../src/app.js');
+
+  // Every COLORS.<key> the view uses must be a key COLORS actually has.
+  const declared = read('../../shared/scene.js')
+    .match(/export const COLORS = \{([\s\S]*?)\n\}/)[1];
+  const have = [...declared.matchAll(/(\w+):/g)].map((m) => m[1]);
+  const used = [...new Set([...app.matchAll(/COLORS\.(\w+)/g)].map((m) => m[1]))];
+  const missing = used.filter((k) => !have.includes(k));
+  ok('every shared colour the view names exists', missing.length === 0,
+     `missing ${missing.join(', ')}`);
+  ok('the view actually uses the shared palette', used.length > 0);
+
+  // The same check for the game's own copy: a missing string renders as
+  // "undefined" on the page, which is just as quiet.
+  const copy = await import('../src/copy.js');
+  const wanted = [...new Set([...app.matchAll(/\b(HUD|WON|FOURTH|PANELS)\.(\w+)/g)]
+    .map((m) => m[1] + '.' + m[2]))];
+  const absent = wanted.filter((w) => {
+    const [mod, k] = w.split('.');
+    return !copy[mod] || !(k in copy[mod]);
+  });
+  ok('every copy string the view names exists', absent.length === 0,
+     `missing ${absent.join(', ')}`);
+  ok('the view actually reads its copy file', wanted.length > 3);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

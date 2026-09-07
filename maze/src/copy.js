@@ -34,8 +34,10 @@ export const FOURTH = {
   // than about dimensions in the abstract.
   firstSight: 'That short stub of rope goes nowhere you can see. It leaves ' +
               'this slice entirely. Take it and the whole map changes.',
-  // The label on such a passage in the minimap legend.
+  // The label on such a passage in the legend beside the board.
   legend: 'a way out of this slice',
+  // And the other mark worth explaining: the places where you have to choose.
+  legendJunction: 'a place to choose',
 };
 
 export const WON = {

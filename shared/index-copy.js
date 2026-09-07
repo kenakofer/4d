@@ -32,6 +32,13 @@ export const INDEX = {
       tag: '2 players', //kenan approved
       text: 'Competitive 2 player classic in a fast-paced 4-dimensional head-to-head', //kenan approved
     },
+    {
+      href: './maze/',
+      dim: '4D',
+      name: 'Maze',
+      text: 'Find the way out. Only the passages are drawn, so a corridor ' +
+            'that stops short is a way into the next slice.',
+    },
   ],
 
   notes: [

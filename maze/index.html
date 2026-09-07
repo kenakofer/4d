@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4D Maze</title>
+<link rel="stylesheet" href="../shared/style.css?v=19">
+<style>
+  /* The maze's own furniture: a legend for what the rope is doing.
+
+     Unknot's rope is one strand and needs no key -- there is nothing to
+     confuse it with. A maze's rope forks, and the two things worth telling
+     apart are a junction (a choice) and a stub leaving the slice (a choice
+     you cannot see the far end of). Both are marked in the scene; this says
+     what the marks mean. */
+  .legend { display: grid; gap: 6px; margin-top: 10px; }
+  .legend div { display: flex; align-items: center; gap: 8px;
+                font-size: 12px; color: var(--dim); }
+  .swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="panel" id="hud">
+  <h1 id="title">—</h1>
+  <p id="blurb"></p>
+  <div id="status"></div>
+  <div class="padhead" id="padHeading"></div>
+  <div id="pad"></div>
+  <div class="padfoot">
+    <span><kbd>shift</kbd><span id="rotateHint"></span></span>
+  </div>
+  <div class="legend">
+    <div><span class="swatch" id="swJunction"></span><span id="legendJunction"></span></div>
+    <div><span class="swatch" id="swW"></span><span id="legendW"></span></div>
+  </div>
+  <div class="controls">
+    <button id="reset"></button>
+  </div>
+</div>
+
+<div class="panel" id="mapPanel">
+  <svg id="minimap" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
