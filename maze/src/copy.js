@@ -46,6 +46,11 @@ export const FOURTH = {
   legendExit: '',
 };
 
+// Reaching the exit.
+//
+// Shown on a card over the board, like every other game's finish -- see
+// maze/index.html. The board stays visible behind it, so the route just walked
+// and the two goal boxes are still there to look at.
 export const WON = {
   heading: 'Out',
   // The stat that is worth knowing at the end: how much of the maze you walked
@@ -59,6 +64,7 @@ export const WON = {
   playAgainKey: 'Space', //kenan approved
   playAgain: 'New maze', //kenan approved
 };
+
 
 // The axis letters and the panel footers are the same words in every game here,
 // so they live in shared/copy.js and are re-exported rather than restated. See

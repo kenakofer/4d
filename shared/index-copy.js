@@ -12,6 +12,24 @@ export const INDEX = {
   lede: 'Grid games played in four dimensions, (or in three, or in two...)' + //kenan approved
         'The movement tutorial is recommended if you\'re new to 4D motion', //kenan approved
 
+  // The way straight into the movement tutorial, above the games and set apart
+  // from them by a rule.
+  //
+  // It is not a game, so it does not belong in the list -- but the lede
+  // recommends it to anyone new to 4D motion, and until now there was nothing
+  // on the page to act on that with. A player who took the advice had to pick a
+  // game, wait to be redirected, and end up somewhere they had not chosen.
+  //
+  // The link carries `then=/` -- the tutorial's own return mechanism, the same
+  // one a game uses when it sends a new player here. So finishing or skipping
+  // comes back to this page rather than dropping the player into Snake, which
+  // is a game they did not ask for.
+  tutorial: {
+    href: './snake/?then=%2F',
+    name: '', //draft
+    text: '', //draft
+  },
+
   games: [
     {
       href: './unknot/', //kenan approved

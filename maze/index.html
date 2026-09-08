@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>4D Maze</title>
-<link rel="stylesheet" href="../shared/style.css?v=21">
+<link rel="stylesheet" href="../shared/style.css?v=22">
 <style>
   /* The shared sheet sizes #mapPanel for unknot's one wide diagram. Two square
      slices side by side set their own width. */
@@ -64,6 +64,25 @@
     <div class="padcluster" id="padHorizontal"></div>
     <svg id="mapXZ" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"></svg>
     <div class="mapfoot" id="mapXZFoot"></div>
+  </div>
+</div>
+
+<!-- The win card. Reaching the exit is the whole point of the maze, and until
+     now it was announced by a line of text in the side panel -- which is where
+     the step count already lived, so the one moment the game is played for
+     looked like the counter ticking over.
+
+     Same card, same id and same stylesheet as the other games' game-over
+     screens, so a finish here reads as a finish. The board stays visible
+     behind it: the route just walked is worth seeing at the end, and the two
+     goal boxes are still standing on it. -->
+<div id="over">
+  <div class="card">
+    <h2 id="overHeading"></h2>
+    <p class="cause" id="overCause"></p>
+    <div class="score" id="overScore">0</div>
+    <div class="scorelbl" id="overScoreLabel"></div>
+    <button id="restart"><span class="key" id="restartKey"></span><span class="sub" id="restartSub"></span></button>
   </div>
 </div>
 

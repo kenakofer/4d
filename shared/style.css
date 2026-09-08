@@ -318,6 +318,13 @@ button:hover, select:hover { border-color: var(--accent); }
             text-transform: uppercase; color: var(--dim); font-weight: 600; }
 
 #pause .items { display: flex; flex-direction: column; gap: 7px; }
+/* A hidden row is hidden, whatever else the sheet says.
+   `display: flex` below sets a display on every item, and a display set by a
+   rule beats the `hidden` attribute's own -- so the tutorial row on a game that
+   has no tutorial was drawn anyway, as a blank plate. It was selectable too:
+   items() filters on `hidden`, so the arrow keys stopped on a row nobody could
+   see, which read as the selection skipping a step. */
+#pause .items > *[hidden] { display: none; }
 /* Items are a key or glyph on the left and what it does on the right, so the
    menu reads as a column of labelled actions rather than a stack of words. */
 #pause .items > * {

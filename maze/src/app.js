@@ -36,6 +36,7 @@ import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
 import { Sky } from '../../shared/sky.js';
+import { dropConfetti } from '../../shared/confetti.js';
 import { haloMaterial, jointHaloMaterial, fatten, fattenJoint, overshoot,
   shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { armMask, sleeveFraction } from '../../shared/haloshape.js';
@@ -175,6 +176,13 @@ function writeLabels() {
   document.getElementById('title').textContent = HUD.title;
   document.getElementById('blurb').textContent = HUD.blurb;
   document.getElementById('reset').textContent = WON.playAgain;
+  // The win card. Its heading and the label under the count never change, so
+  // they are written once here; the count and the sentence are filled in when
+  // it is shown.
+  document.getElementById('overHeading').textContent = WON.heading;
+  document.getElementById('overScoreLabel').textContent = WON.yourSteps;
+  document.getElementById('restartKey').textContent = WON.playAgainKey;
+  document.getElementById('restartSub').textContent = WON.playAgain;
   document.getElementById('legendJunction').textContent = FOURTH.legendJunction;
   document.getElementById('legendW').textContent = FOURTH.legend;
   document.getElementById('legendPlayer').textContent = FOURTH.legendPlayer;
@@ -237,6 +245,7 @@ function newMaze() {
   toExit = distances(maze, exit);
   steps = 0;
   won = false;
+  hideWin();
 
   slide.focus = at.split(',').map(Number)[viewAxes[3]];
   slide.shown = slide.focus;
@@ -372,6 +381,7 @@ function init() {
   addEventListener('keydown', onKey);
   addEventListener('resize', resize);
   document.getElementById('reset').onclick = newMaze;
+  document.getElementById('restart').onclick = newMaze;
   resize();
   requestAnimationFrame(frame);
 }
@@ -845,7 +855,7 @@ function tryMove(axis, sign) {
   at = nk;
   steps++;
   slide.focus = np[viewAxes[3]];
-  if (at === exit) won = true;
+  if (at === exit) { won = true; showWin(); }
   rebuildRope();
   updateCursor(true);
   updateHud();
@@ -856,6 +866,18 @@ function tryMove(axis, sign) {
 
 function onKey(e) {
   if (pause && pause.open) return;
+  // Space starts the next maze once this one is finished. The copy has
+  // promised this key on the card's button all along; until now nothing read
+  // it, so the one instruction on screen at the end did nothing.
+  //
+  // Only while the card is up. A bare restart key during play is exactly what
+  // the pause menu exists to prevent -- a key next to the movement keys will
+  // eventually be hit by accident and throw away a good run.
+  if (won && (e.key === ' ' || e.key === 'Enter')) {
+    e.preventDefault();
+    newMaze();
+    return;
+  }
   const m = KEYMAP[e.key];
   if (!m) return;
   e.preventDefault();
@@ -869,6 +891,29 @@ function updateHud() {
     return;
   }
   status.innerHTML = PANELS.single(HUD.steps, steps);
+}
+
+// Reaching the exit.
+//
+// The card and the shower, together. Until now this was a line of text in the
+// side panel -- and the step count was already there, so the one moment the
+// whole maze is played for looked like the counter ticking over.
+//
+// The board is left showing behind the card, which is why that card is built
+// the way it is: the route just walked is worth looking at, and the start and
+// exit boxes are still standing on it at either end of it.
+function showWin() {
+  document.getElementById('overScore').textContent = steps;
+  document.getElementById('overCause').textContent = WON.summary(steps, best);
+  document.getElementById('over').classList.add('show');
+  // Focused so Space and Enter reach the button wherever the browser routes
+  // keys first -- the same care the tutorial's card takes.
+  document.getElementById('restart').focus();
+  dropConfetti();
+}
+
+function hideWin() {
+  document.getElementById('over').classList.remove('show');
 }
 
 // ---------------------------------------------------------------------------
