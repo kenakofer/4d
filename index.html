@@ -52,7 +52,7 @@
   <h1 id="title"></h1>
   <p class="lede" id="lede"></p>
   <a class="game tutorial" id="tutorialLink">
-    <h2 id="tutorialName"></h2>
+    <h2><span class="dim" id="tutorialDim"></span><span id="tutorialName"></span></h2>
     <p id="tutorialText"></p>
   </a>
   <hr>
@@ -65,6 +65,10 @@
   document.getElementById('lede').textContent = INDEX.lede;
   const tut = document.getElementById('tutorialLink');
   tut.href = INDEX.tutorial.href;
+  // The badge is set the same way the games' are, from the same field, so the
+  // tutorial says which dimensions it covers exactly as they say which they
+  // are played in. It names three, since the lessons climb 2D to 4D.
+  document.getElementById('tutorialDim').textContent = INDEX.tutorial.dim;
   document.getElementById('tutorialName').textContent = INDEX.tutorial.name;
   document.getElementById('tutorialText').textContent = INDEX.tutorial.text;
   document.getElementById('games').innerHTML = INDEX.games.map((g) => `
