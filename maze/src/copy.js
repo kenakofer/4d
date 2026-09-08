@@ -32,14 +32,16 @@ export const FOURTH = {
   legend: '',
   // And the other mark worth explaining: the places where you have to choose.
   legendJunction: '',
-  // The two cells that are not like the others: where the player is standing
-  // and where they are going.
+  // The three cells that are not like the others: where the player is, where
+  // they came in, and where they are going.
   //
-  // Neither is only a colour, so neither is fully described by a swatch. The
-  // player's cell wears a blinking cage and casts marks on the walls saying
-  // where it sits along each axis; the exit pulses. The legend can show the
-  // colours and nothing else, so if either of those needs saying, here is
-  // where it gets said.
+  // None of them is only a colour, so a swatch describes none of them fully.
+  // The player's cell wears a blinking wireframe cage and casts marks on the
+  // walls saying where it sits along each axis; the start is a still block of
+  // haze; the exit is the same block, breathing. The legend can show the
+  // colours and nothing else, so if any of that needs saying, here is where it
+  // gets said.
+  legendPlayer: '',
   legendStart: '',
   legendExit: '',
 };

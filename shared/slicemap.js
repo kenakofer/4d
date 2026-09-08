@@ -21,6 +21,8 @@ const NS = 'http://www.w3.org/2000/svg';
 // rather than blended.
 const GROUND = '#161c26';
 
+
+
 export class SliceMap {
   // `axes` is [horizontal, vertical] -- which two board axes the panel shows.
   // Everything else is pinned to the focus cell's coordinates.
@@ -71,9 +73,40 @@ export class SliceMap {
     // flush and the joint disappears. Colour is then free to vary cell by cell
     // without breaking a single strand apart.
     //
-    //   cells   array of full board cells to draw
-    //   joined  (a, b) => are these two linked? Called on panel neighbours.
-    //   colour  (cell) => the cell's colour, as a CSS string
+    // A cell with a way off the panel is ringed, if `offPanel` says so.
+    //
+    // This is the one thing a cross-section cannot draw and most needs to. The
+    // panel pins every axis but two, so a passage along one of the others has
+    // nowhere to go on it -- the cell is drawn as plain strand, or as a strand
+    // that simply stops, and a player reading the panel has no way to know a
+    // way out was standing there. On a maze panel that was nine cells in
+    // twenty: nearly half the exits, invisible.
+    //
+    // Marking BRANCHING instead was the first attempt and marked the wrong
+    // thing. A cell with three passages is a junction in the room, and the room
+    // already says so with a yellow ball; ringing the same cells here only
+    // repeated on the map what the territory had already made plain, while
+    // saying nothing about the cells whose one hidden passage is the whole
+    // reason a flat panel can mislead. Most cells with a way off the panel have
+    // just two passages and are not junctions at all.
+    //
+    // Drawn in the BACKGROUND colour, not a colour of its own. It is a hole in
+    // the strand -- the panel saying "the maze continues, but not on this
+    // sheet" -- and a hole is exactly what the ground showing through reads as.
+    // A coloured ring would have joined the panel's small vocabulary of things
+    // that mean something, and this means the absence of something.
+    //
+    // Hollow, so the distance colour still runs through the cell: that colour
+    // is the panel's answer to "which way is downhill", and blanking it at
+    // every exit would take it away exactly where a choice is being made.
+    //
+    //   cells     array of full board cells to draw
+    //   joined    (a, b) => are these two linked? Called on panel neighbours.
+    //   colour    (cell) => the cell's colour, as a CSS string
+    //   offPanel  (cell, onPanel) => is there a passage from here that this
+    //             panel cannot draw? `onPanel(q)` answers whether a cell falls
+    //             on this panel, since only the panel knows its own two axes.
+    //             Optional.
     this.network = null;
     this.glow = null;        // Set of keys, or null
     // [left, right, below, above] -- the key or name for each edge of the
@@ -301,8 +334,49 @@ export class SliceMap {
         if (dh + dv !== 1) return false;
         return this.network.joined(a, b);
       };
+      // Is this cell joined to anything the panel can draw? Both passes need
+      // the answer -- the first to decide between a strand and a dot, the
+      // second to leave the dots alone -- and they must never disagree.
+      const linkedOnPanel = (p) =>
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dh, dv]) => {
+          const q = p.slice();
+          q[H] += dh; q[V] += dv;
+          return link(p, q);
+        });
+
+      // The ring that marks a way off the panel, as one shape both passes agree
+      // about. The dot an isolated cell is drawn as is exactly this ring's
+      // hole, so the two numbers cannot drift apart.
+      const ringR = cell * 0.18;
+      const ringW = cell * 0.072;
+      const holeR = ringR - ringW / 2;
+
       for (const p of this.network.cells) {
         if (!this.inSlice(p)) continue;
+
+        // A cell joined to nothing this panel can draw is a DOT, not a square.
+        //
+        // Every one of these has a way off the panel -- it must, or it would be
+        // cut off from the maze entirely -- so the ring pass below would ring
+        // it, and a ring inside a lone rounded square is two marks saying one
+        // thing. Worse, the square claims a length of passage that is not
+        // there: what is at this cell is a way out of the slice and nothing
+        // else, and drawing a bar of corridor around it says the opposite.
+        //
+        // So the square goes and what is left is the ring's own hole, drawn in
+        // the cell's colour: the same small round mark the ring would have
+        // punched, standing alone. It reads as a stub of passage seen end-on,
+        // which is exactly what it is.
+        if (!linkedOnPanel(p)) {
+          const d = document.createElementNS(NS, 'circle');
+          d.setAttribute('cx', (px(p[H]) + cell / 2).toFixed(2));
+          d.setAttribute('cy', (py(p[V]) + cell / 2).toFixed(2));
+          d.setAttribute('r', holeR.toFixed(2));
+          d.setAttribute('fill', this.network.colour(p));
+          svg.appendChild(d);
+          continue;
+        }
+
         let x0 = px(p[H]) + netInset, y0 = py(p[V]) + netInset;
         let x1 = px(p[H]) + cell - netInset, y1 = py(p[V]) + cell - netInset;
         // The four neighbours on this panel, each reached toward if linked.
@@ -317,6 +391,7 @@ export class SliceMap {
           else if (py(q[V]) < py(p[V])) y0 -= netInset;
           else y1 += netInset;
         }
+
         const r = document.createElementNS(NS, 'rect');
         r.setAttribute('x', x0.toFixed(2));
         r.setAttribute('y', y0.toFixed(2));
@@ -328,6 +403,38 @@ export class SliceMap {
         r.setAttribute('rx', (netInset * 0.9).toFixed(2));
         r.setAttribute('fill', this.network.colour(p));
         svg.appendChild(r);
+      }
+
+      // The ways off the panel, in a second pass over the same cells.
+      //
+      // After every strand is down, not as each cell is drawn: a ring drawn
+      // during the first pass would be painted over by the next cell that
+      // reaches toward it. These sit on cells that are linked to something, so
+      // there is always a neighbour to bury them.
+      if (this.network.offPanel) {
+        for (const p of this.network.cells) {
+          if (!this.inSlice(p)) continue;
+          // The panel hands over its own slice test: the game knows the passages,
+          // the panel knows which two axes it can draw.
+          if (!this.network.offPanel(p, (q) => this.inSlice(q))) continue;
+          // An isolated cell was already drawn AS this ring's hole. Ringing it
+          // now would lay the ground colour straight over that dot and rub out
+          // the only thing marking the cell.
+          if (!linkedOnPanel(p)) continue;
+          const c = document.createElementNS(NS, 'circle');
+          c.setAttribute('cx', (px(p[H]) + cell / 2).toFixed(2));
+          c.setAttribute('cy', (py(p[V]) + cell / 2).toFixed(2));
+          // Small: a mark ON the strand, not a ring around the cell. At the
+          // full width of the cell it read as a piece of the maze -- a loop of
+          // passage rather than a note about one -- and where these cluster the
+          // rings ran into each other. Pulled in, it sits clear inside the
+          // strand it marks.
+          c.setAttribute('r', ringR.toFixed(2));
+          c.setAttribute('fill', 'none');
+          c.setAttribute('stroke', GROUND);
+          c.setAttribute('stroke-width', ringW.toFixed(2));
+          svg.appendChild(c);
+        }
       }
     }
 

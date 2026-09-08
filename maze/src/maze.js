@@ -121,6 +121,29 @@ export const DEFAULTS = {
   // it is a smudge on the map.
   minBranch: 2,
 
+  // And a dead end reached by stepping in w is cut whatever its length, one
+  // cell at a time.
+  //
+  // A stub off a corridor you can see is a decision, however small: you look
+  // down it, you see it ends, you carry on. A stub through w is not, because
+  // you cannot look down it. The slice view draws a step in w as an arrow --
+  // there is no rope to follow with your eye, since the cell is in another
+  // frame -- so the player is offered a way out of the slice, spends a move
+  // taking it, and arrives at a cell with nothing but the way back.
+  //
+  // That is the worst move a maze can offer. It costs a step, it teaches
+  // nothing, and it is indistinguishable beforehand from the w-steps that
+  // matter, which is what makes it corrosive: it trains the player to
+  // distrust the arrows, and the arrows are how the fourth dimension is
+  // played.
+  //
+  // "By one" is the whole rule. Only the leaf itself goes, not the corridor
+  // behind it -- what was wrong was the last step being a blind one, and
+  // removing that step fixes it. The cell it hung off keeps whatever else it
+  // had, and if that leaves a NEW w-leaf behind, the next pass takes that one
+  // too, one cell at a time. See pruneWLeaves.
+  pruneWLeaves: true,
+
   // The smallest maze worth playing, as a fraction of the board. Growth is
   // random and occasionally dies young: every live passage can stop within the
   // same short window while the maze is still a handful of cells, which left
@@ -332,7 +355,19 @@ function grow(cfg) {
     frontier.push({ cell: pick.np, axis: pick.d.axis, sign: pick.d.sign });
   }
 
-  prune(maze, cfg.minBranch);
+  // The two prunes are run to a JOINT fixed point rather than one after the
+  // other, because each makes work for the other. Cutting a short stub can
+  // leave the cell it hung off a leaf, and that leaf may be reached by a
+  // w-step; cutting a w-leaf can leave a stub two cells long where there was a
+  // junction. Either prune run alone terminates, but running them in sequence
+  // leaves the debris the second one made -- which showed up as short stubs
+  // surviving a `minBranch` of 2.
+  for (;;) {
+    const before = maze.size;
+    prune(maze, cfg.minBranch);
+    if (cfg.pruneWLeaves) pruneWLeaves(maze, cfg.wAxis);
+    if (maze.size === before) break;
+  }
   return { maze, tally };
 }
 
@@ -360,6 +395,28 @@ export function prune(maze, minBranch) {
                                        chainFrom(maze, k).length <= minBranch);
     if (end === undefined) return maze;
     for (const c of chainFrom(maze, end)) maze.drop(c);
+  }
+}
+
+// Cut every dead end whose one passage is a step along `axis`, a cell at a time.
+//
+// The leaf only -- see pruneWLeaves in DEFAULTS for why "by one" is the rule
+// rather than a length. Cutting it can expose another, either because the cell
+// behind it was a three-way that is now a corridor end, or because that cell is
+// itself only reachable through w; so this repeats until a pass finds none,
+// exactly as prune() does and for the same reason.
+//
+// The last cell is never cut. A maze of one cell is not a maze, and a rule
+// about which dead ends are worth walking to has nothing to say when there is
+// nowhere to walk.
+export function pruneWLeaves(maze, axis) {
+  if (axis === undefined || axis === null || axis < 0) return maze;
+  for (;;) {
+    if (maze.size <= 1) return maze;
+    const leaf = maze.cells.find((k) => maze.degree(k) === 1 &&
+                                        Maze.axisOf(k, maze.neighbours(k)[0]) === axis);
+    if (leaf === undefined) return maze;
+    maze.drop(leaf);
   }
 }
 

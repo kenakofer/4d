@@ -11,8 +11,8 @@
 // are measured over a batch of seeds and asserted against the spec, with the
 // tolerance written down. A change to the weights that moves these is meant to
 // fail here and be looked at, not to pass quietly.
-import { generate, prune, stats, distances, diameter, components, Maze, DEFAULTS }
-  from '../src/maze.js';
+import { generate, prune, pruneWLeaves, stats, distances, diameter, components,
+  Maze, DEFAULTS } from '../src/maze.js';
 import { jointRadius, needsJoint, junctionKind, axesAt }
   from '../../shared/junction.js';
 import { key } from '../../shared/grid.js';
@@ -807,6 +807,308 @@ console.log('\nmaze: what the slice panels must show');
   ok('linked cells almost never share a distance, so colour cannot group them',
      pairs > 0 && differing === pairs,
      `${differing} of ${pairs} pairs differ`);
+}
+
+
+console.log('\nmaze: dead ends through the fourth dimension');
+{
+  // A dead end reached by a w-step is the one move the maze must never offer:
+  // the panel draws it as an arrow out of the slice, so it cannot be seen to
+  // be a dead end until the step has been spent. See pruneWLeaves in the model.
+  const wLeaves = (maze) => maze.cells.filter((k) =>
+    maze.degree(k) === 1 && Maze.axisOf(k, maze.neighbours(k)[0]) === DEFAULTS.wAxis);
+
+  let found = 0;
+  for (const { maze } of batch) found += wLeaves(maze).length;
+  ok('no maze offers a blind step out of the slice', found === 0,
+     `${found} across ${SEEDS} mazes`);
+
+  // And the generator really is producing them to be cut -- otherwise the test
+  // above passes by describing a case that never arises, which is the way a
+  // rule like this quietly stops being enforced.
+  let before = 0;
+  for (let s = 0; s < SEEDS; s++) {
+    before += wLeaves(generate({ seed: s, pruneWLeaves: false }).maze).length;
+  }
+  ok('and they exist to be cut', before > 0, `${before} before pruning`);
+}
+{
+  // "By one" is the rule: the leaf goes, the corridor behind it stays. A single
+  // w-step off a run of ordinary corridor should cost exactly one cell.
+  const m = new Maze([5, 5, 5, 5]);
+  m.link('0,0,0,0', '1,0,0,0');
+  m.link('1,0,0,0', '2,0,0,0');
+  m.link('2,0,0,0', '3,0,0,0');
+  m.link('1,0,0,0', '1,0,0,1');       // the blind step out of the slice
+  pruneWLeaves(m, 3);
+  ok('the blind cell goes', !m.has('1,0,0,1'));
+  ok('and nothing else does', m.size === 4);
+  ok('the cell it hung off keeps its own passages',
+     m.degree('1,0,0,0') === 2);
+}
+{
+  // A chain of them unwinds one cell at a time, because cutting a leaf can
+  // expose the next -- which is why this repeats rather than making one pass.
+  const m = new Maze([5, 5, 5, 5]);
+  m.link('0,0,0,0', '1,0,0,0');
+  m.link('1,0,0,0', '1,0,0,1');
+  m.link('1,0,0,1', '1,0,0,2');
+  m.link('1,0,0,2', '1,0,0,3');
+  pruneWLeaves(m, 3);
+  ok('a whole tail of w-steps unwinds', m.size === 2, `left ${m.size}`);
+  ok('down to the cells reachable without one',
+     m.has('0,0,0,0') && m.has('1,0,0,0'));
+}
+{
+  // A w-step that is NOT a dead end is left alone. The rule is about blind
+  // steps, not about w -- cutting real routes through the fourth dimension
+  // would take away the thing the game is for.
+  // The w-step is in the MIDDLE here, with ordinary corridor either side, so
+  // neither of its cells is a leaf and the crossing is a real route.
+  const m = new Maze([5, 5, 5, 5]);
+  m.link('0,0,0,0', '1,0,0,0');
+  m.link('1,0,0,0', '1,0,0,1');       // the crossing
+  m.link('1,0,0,1', '2,0,0,1');
+  pruneWLeaves(m, 3);
+  ok('a w-step leading somewhere survives',
+     m.size === 4 && m.neighbours('1,0,0,0').includes('1,0,0,1'));
+
+  // Even when it is the only way on: a leaf here is '0,0,0,0', whose one
+  // passage runs along w -- and cutting it would be cutting the corridor's end
+  // rather than a stub off it. It goes, and the route beyond it does not.
+  const m2 = new Maze([5, 5, 5, 5]);
+  m2.link('0,0,0,0', '0,0,0,1');
+  m2.link('0,0,0,1', '1,0,0,1');
+  pruneWLeaves(m2, 3);
+  ok('but a leaf is a leaf however the corridor runs',
+     !m2.has('0,0,0,0') && m2.has('1,0,0,1'));
+}
+{
+  // The degenerate board: everything joined along w only. Every end is a
+  // w-leaf, so an unguarded rule eats the entire maze. It stops at one cell.
+  const m = new Maze([2, 2, 2, 5]);
+  for (let w = 0; w < 4; w++) m.link(`0,0,0,${w}`, `0,0,0,${w + 1}`);
+  pruneWLeaves(m, 3);
+  ok('an all-w corridor is not erased entirely', m.size === 1);
+
+  // And a board with no fourth axis at all has nothing to do here.
+  const flat = new Maze([5, 5, 5]);
+  flat.link('0,0,0', '1,0,0');
+  pruneWLeaves(flat, -1);
+  ok('a board with no w axis is left alone', flat.size === 2);
+}
+{
+  // What it costs. The point of measuring is that the cut must not change the
+  // maze it is cleaning up: if pruning shortened the longest route, or split
+  // the board, it would be buying readability with the game.
+  const on = [], off = [];
+  for (let s = 0; s < SEEDS; s++) {
+    on.push(generate({ seed: s }).maze);
+    off.push(generate({ seed: s, pruneWLeaves: false }).maze);
+  }
+  const mean = (a, f) => a.reduce((t, m) => t + f(m), 0) / a.length;
+  const lost = mean(off, (m) => m.size) - mean(on, (m) => m.size);
+  ok('it costs a handful of cells per maze', lost > 0 && lost < 20,
+     `${lost.toFixed(1)} cells`);
+  near('and leaves the longest route where it was',
+       mean(on, (m) => diameter(m).length),
+       mean(off, (m) => diameter(m).length), 4, ' cells');
+  ok('the maze stays in one piece',
+     on.every((m) => components(m).length === 1));
+}
+
+
+{
+  // The rings on the panel: cells with a way OFF it.
+  //
+  // A panel is a cross-section, so a passage along either of the two axes it
+  // pins has nowhere to go on it. The cell is drawn as plain strand -- or as a
+  // strand that simply stops -- and nothing says a way out was standing there.
+  // That is the one thing a flat map of a 4D maze cannot show and most needs
+  // to, so it is marked.
+  //
+  // Marking BRANCHING was the first attempt and marked the wrong thing: a cell
+  // with three passages is a junction, the room already paints it yellow, and
+  // ringing it here only repeated on the map what the territory made plain.
+  // Most cells with a way off the panel are not junctions at all.
+  const { maze } = generate({ seed: 5 });
+  const focus = maze.cells[0].split(',').map(Number);
+  const panel = (H, V) => {
+    const inSlice = (p) => p.every((c, i) => (i === H || i === V) || c === focus[i]);
+    const drawn = maze.cells.filter((k) => inSlice(k.split(',').map(Number)));
+    const ringed = drawn.filter((k) =>
+      maze.neighbours(k).some((n) => !inSlice(n.split(',').map(Number))));
+    return { inSlice, drawn, ringed };
+  };
+
+  const xz = panel(0, 2);
+  ok('the x-z panel has cells with a way off it', xz.ringed.length > 0,
+     `${xz.ringed.length} of ${xz.drawn.length}`);
+  // And it must be selective there, or the mark says nothing. This is the
+  // panel that pairs the two heaviest axes, so most of its passages are ones
+  // it can draw.
+  ok('but not all of them -- the mark distinguishes', xz.ringed.length < xz.drawn.length,
+     `${xz.ringed.length} of ${xz.drawn.length} ringed`);
+
+  // The mark is NOT the room's junction rule. Most ringed cells have exactly
+  // two passages, which is what makes this worth drawing separately: the room
+  // has nothing to say about them.
+  const plain = xz.ringed.filter((k) => maze.degree(k) === 2);
+  ok('and most ringed cells are not junctions at all', plain.length > 0,
+     `${plain.length} of ${xz.ringed.length} ringed have degree 2`);
+
+  // The other direction: a junction whose passages all lie on the panel is not
+  // ringed, because there is nothing hidden about it.
+  const openJunctions = xz.drawn.filter((k) =>
+    maze.degree(k) >= 3 && !xz.ringed.includes(k));
+  ok('a junction fully drawn on the panel needs no ring',
+     openJunctions.every((k) =>
+       maze.neighbours(k).every((n) => xz.inSlice(n.split(',').map(Number)))));
+}
+{
+  // The w-y panel pairs the two RAREST axes -- w at 5% of free choices, y at
+  // the lightest spatial weight -- so nearly every cell on it has a passage it
+  // cannot draw. The mark is close to universal there.
+  //
+  // That is the matrix showing through rather than a fault: the panel really
+  // does hide almost everything, and a mark that appears almost everywhere on
+  // it is telling the truth. Asserted so the number is written down and a
+  // change to the weights that moves it has to be looked at.
+  const focus0 = (maze) => maze.cells[0].split(',').map(Number);
+  let ringed = 0, drawn = 0;
+  for (const { maze } of batch) {
+    const focus = focus0(maze);
+    const inSlice = (p) => p.every((c, i) => (i === 3 || i === 1) || c === focus[i]);
+    for (const k of maze.cells) {
+      const p = k.split(',').map(Number);
+      if (!inSlice(p)) continue;
+      drawn++;
+      if (maze.neighbours(k).some((n) => !inSlice(n.split(',').map(Number)))) ringed++;
+    }
+  }
+  const share = ringed / drawn;
+  near('nearly every cell on the w-y panel has a way off it', share, 0.92, 0.06);
+}
+{
+  // Isolated cells are drawn as a dot, not a lone rounded square.
+  //
+  // A cell with no neighbour the panel can draw has no strand to be part of.
+  // Drawn as a square it claimed a length of corridor that is not there, and
+  // since every such cell also has a way off the panel it wore a ring as well
+  // -- two marks, one of them wrong, saying the one thing the other said.
+  //
+  // The whole rule rests on "every isolated cell has a way off", so that is
+  // asserted rather than assumed: it follows from the generator only because a
+  // cell with no passage at all is not in the maze, and a cell whose every
+  // passage leaves the panel is exactly what an isolated cell is.
+  let isolated = 0, stranded = 0, drawn = 0;
+  for (const { maze } of batch) {
+    const focus = maze.cells[0].split(',').map(Number);
+    for (const [H, V] of [[3, 1], [0, 2]]) {
+      const inSlice = (p) => p.every((c, i) => (i === H || i === V) || c === focus[i]);
+      for (const k of maze.cells) {
+        const p = k.split(',').map(Number);
+        if (!inSlice(p)) continue;
+        drawn++;
+        const onPanel = maze.neighbours(k).some((n) => {
+          const q = n.split(',').map(Number);
+          return inSlice(q) && Math.abs(q[H] - p[H]) + Math.abs(q[V] - p[V]) === 1;
+        });
+        if (onPanel) continue;
+        isolated++;
+        // No neighbour on the panel, so every passage it has leaves -- unless
+        // it has none, which would be a cell the maze never joined to anything.
+        if (!maze.neighbours(k).some((n) => !inSlice(n.split(',').map(Number)))) {
+          stranded++;
+        }
+      }
+    }
+  }
+  ok('panels carry isolated cells, so the case is real', isolated > 0,
+     `${isolated} of ${drawn} drawn cells`);
+  ok('and every one of them has a way off the panel', stranded === 0,
+     `${stranded} isolated cells with no passage at all`);
+  // If this were rare the dot would not be worth a branch. It is not rare.
+  ok('they are common enough to matter', isolated > drawn * 0.1,
+     `${(100 * isolated / drawn).toFixed(0)}% of drawn cells`);
+}
+
+console.log('\nmaze: every cell is drawn as something');
+{
+  // A cell must be visible as EITHER a ball or a length of rope. The one way
+  // to be neither is to have no rope and no ball, and that is what the middle
+  // of a straight run of w-moves was: needsJoint asks whether two cylinders may
+  // meet flush without a ball over the seam, and answered "yes, straight
+  // through" for a cell whose two passages were both arrows -- so no ball was
+  // drawn, and no cylinders existed to meet. A bare point with two arrows
+  // aiming at it.
+  //
+  // This is the view's rule, restated: a cell is left bare only when the rope's
+  // own rule says so AND every passage there is rope.
+  const W = DEFAULTS.wAxis;
+  const bare = (maze, k) => {
+    const rope = maze.neighbours(k).filter((n) => Maze.axisOf(k, n) !== W);
+    return maze.degree(k) === rope.length &&
+           !needsJoint(rope.length, axesAt(rope, k, Maze.axisOf));
+  };
+
+  let invisible = 0, runs = 0;
+  for (const { maze } of batch) {
+    for (const k of maze.cells) {
+      const rope = maze.neighbours(k).filter((n) => Maze.axisOf(k, n) !== W);
+      // A cell with no rope at all: whatever else is true, it must get a ball.
+      if (rope.length === 0) {
+        runs++;
+        if (bare(maze, k)) invisible++;
+      }
+    }
+  }
+  ok('straight runs of w-moves occur, so the case is real', runs > 0,
+     `${runs} cells whose every passage steps in w`);
+  ok('and none of them is drawn as nothing', invisible === 0,
+     `${invisible} cells with neither ball nor rope`);
+
+  // The old rule really did lose them -- otherwise the test above passes
+  // against a bug that was never there.
+  let lostBefore = 0;
+  for (const { maze } of batch) {
+    for (const k of maze.cells) {
+      if (maze.neighbours(k).some((n) => Maze.axisOf(k, n) !== W)) continue;
+      if (!needsJoint(maze.degree(k), axesAt(maze.neighbours(k), k, Maze.axisOf))) {
+        lostBefore++;
+      }
+    }
+  }
+  ok('the rope-only rule would have lost them', lostBefore > 0,
+     `${lostBefore} would have gone unmarked`);
+}
+{
+  // And the other half: a w-step branching off a straight corridor is a
+  // junction, and keeps its ball. Asking needsJoint about the rope ALONE would
+  // see a corridor running straight through and drop it, hiding the choice.
+  const W = DEFAULTS.wAxis;
+  let branchings = 0, kept = 0;
+  for (const { maze } of batch) {
+    for (const k of maze.cells) {
+      const rope = maze.neighbours(k).filter((n) => Maze.axisOf(k, n) !== W);
+      // Rope straight through, plus at least one way out through w.
+      if (rope.length !== 2 || maze.degree(k) === rope.length) continue;
+      if (axesAt(rope, k, Maze.axisOf).size !== 1) continue;
+      branchings++;
+      const bare = maze.degree(k) === rope.length &&
+                   !needsJoint(rope.length, axesAt(rope, k, Maze.axisOf));
+      if (!bare) kept++;
+      // It is a junction by the rule the room marks junctions with, too.
+      if (junctionKind(maze.degree(k),
+                       axesAt(maze.neighbours(k), k, Maze.axisOf)) !== 'junction') {
+        kept--;
+      }
+    }
+  }
+  ok('a w-step off a straight corridor happens', branchings > 0,
+     `${branchings} found`);
+  ok('and every one keeps its ball, marked as a junction',
+     kept === branchings, `${kept} of ${branchings}`);
 }
 
 
