@@ -25,9 +25,10 @@ export const INDEX = {
   // comes back to this page rather than dropping the player into Snake, which
   // is a game they did not ask for.
   tutorial: {
-    href: './snake/?then=%2F',
-    name: '', //draft
-    text: '', //draft
+    href: './snake/?then=%2F', //kenan approved
+    dim: '2D, 3D, 4D', //kenan approved
+    name: 'Movement Tutorial', //kenan approved
+    text: 'Crash course for 4D movement control', //kenan approved
   },
 
   games: [
