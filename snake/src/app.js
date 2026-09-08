@@ -187,6 +187,8 @@ function newGame(opts) {
   }) : null;
   if (mapWY) {
     mapWY.cellFill = lava;
+    // The head is orange in the room, so it is orange on the map.
+    mapWY.markerColour = '#' + HEAD_CONE.getHexString();
     // The full halo: on a flat panel a glow is real information about the
     // plane being drawn, rather than a restatement of a solid you can already
     // see.
@@ -216,6 +218,7 @@ function newGame(opts) {
     flipV: true,
   });
   mapXZ.cellFill = lava;
+  mapXZ.markerColour = '#' + HEAD_CONE.getHexString();
   mapXZ.glow = game.lavaGlow();
   el('over').classList.remove('show');
   updateHUD();
@@ -539,6 +542,24 @@ function buildLava() {
 
 const HEAD_COL = new THREE.Color(0x8dffc8);
 const TAIL_COL = new THREE.Color(0x2a8f6a);
+
+// The head is an orange cone, and it is the one part of the snake that is not
+// the snake's colour or the snake's shape.
+//
+// Both of those differences are doing work. The body runs a ramp from bright to
+// dark so which end is which can be read at a glance, but a ramp is a gradient
+// and a gradient is exactly what is hard to judge in a tangle -- on a long
+// snake doubled back through four dimensions the brightest ball and the next
+// brightest are neighbours, and the eye has to compare rather than simply find.
+// A colour off the ramp entirely is found, not compared.
+//
+// The SHAPE says which way you are going, which no ball can. A sphere is the
+// same from every side, so the head marked the cell it was in and nothing else;
+// the player knew their direction only from having pressed the key. A cone
+// points, and pointing is most of what a head is for -- it makes the next cell
+// visible before the move, which is the whole difficulty of steering in a
+// dimension you cannot see.
+const HEAD_CONE = new THREE.Color(0xff8c1a);
 const APPLE_COL = new THREE.Color(0x24ff5e);
 const PROJ_W = 0.13;
 
@@ -561,8 +582,12 @@ function buildParts() {
   const bodyProj = new THREE.Mesh(new THREE.BufferGeometry(),
     projectionMaterial({ color: 0x7fb0d8, opacity: 0.1, ref: 1 }));
   bodyProj.renderOrder = 0;
+  // The head's mark takes the head's own colour. It was cyan while the head was
+  // a green ball -- cyan being the nearest thing to "not the body's ramp" --
+  // but the head is orange now, and a shadow in a colour its caster does not
+  // have is a second thing to learn rather than the same thing seen flat.
   const headProj = new THREE.Mesh(new THREE.BufferGeometry(),
-    projectionMaterial({ color: 0x35e3f0, opacity: 0.1, ref: 2 }));
+    projectionMaterial({ color: HEAD_CONE.getHex(), opacity: 0.14, ref: 2 }));
   headProj.renderOrder = 0.5;
   // The apple's mark, so you can find it on the walls before you can see it in
   // the room -- which, with six rooms on screen, is most of the time.
@@ -625,6 +650,23 @@ function redraw() {
   // Open ended -- see shellGeometry(); a cap here bands every straight run.
   const shellGeo = shellGeometry(TUBE, 12);
   const jointGeo = new THREE.SphereGeometry(JOINT, 14, 12);
+  // The head's cone. Medium big: half again as wide as the ball it replaces, so
+  // it is plainly the front rather than one more bead, and long enough for the
+  // point to read as a point -- but still inside its own cell, or the head
+  // would appear to be standing where the snake has not yet gone.
+  const HEAD_R = JOINT * 1.5;
+  // Long enough for the point to read as a point, and no longer: at three times
+  // the joint the tip reached 0.64 from the cell centre, past the 0.5 boundary
+  // and into the cell in front -- so the head appeared to be standing where the
+  // snake had not yet gone, which is the exact confusion a pointing head is
+  // supposed to remove. Sized so the tip stops just inside its own cell.
+  const HEAD_LEN = JOINT * 2.2;
+  // How far the base sits behind the cell centre, so the cone caps the neck it
+  // grows out of instead of floating clear of it.
+  const HEAD_BACK = JOINT * 0.35;
+  // Built pointing along +y, which is what three's cone does and what the
+  // quaternion below expects.
+  const headGeo = new THREE.ConeGeometry(HEAD_R, HEAD_LEN, 16);
   const up = new THREE.Vector3(0, 1, 0);
 
   const add = (o) => { parts.group.add(o); parts.dynamic.push(o); };
@@ -645,15 +687,31 @@ function redraw() {
     const hop = (i > 0 && wOf(body[i - 1]) !== wOf(p)) ||
                 (i + 1 < n && wOf(body[i + 1]) !== wOf(p));
     if (i === 0 || i === n - 1 || bend || hop) {
-      const m = new THREE.Mesh(jointGeo, new THREE.MeshLambertMaterial({
-        color: col, emissive: col, emissiveIntensity: 0.3,
+      // The head is a cone pointing the way it is about to go; everything else
+      // is a ball. See HEAD_CONE.
+      const isHead = i === 0;
+      const aim = isHead ? headAim(body) : null;
+      const geo = aim ? headGeo : jointGeo;
+      const hcol = isHead ? HEAD_CONE : col;
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+        color: hcol, emissive: hcol, emissiveIntensity: 0.3,
         transparent: f < 1, opacity: f }));
       m.position.set(...proj(p));
+      if (aim) {
+        m.quaternion.setFromUnitVectors(up, aim);
+        // Cones are built about their middle, so left alone the base would sit
+        // half a length BEHIND the cell centre -- a gap over the neck it is
+        // meant to cap. Pushed forward so the base sits just behind centre,
+        // where the ball it replaces sat and where the body reaches to, and
+        // the tip stops short of the next cell.
+        m.position.addScaledVector(aim, HEAD_LEN / 2 - HEAD_BACK);
+      }
       m.renderOrder = ROPE_ORDER;
       add(m);
-      const h = new THREE.Mesh(jointGeo, haloMaterial(f));
+      const h = new THREE.Mesh(geo, haloMaterial(f));
       h.position.copy(m.position);
-      h.scale.setScalar(fatten(JOINT));
+      h.quaternion.copy(m.quaternion);
+      h.scale.setScalar(aim ? fatten(HEAD_R) : fatten(JOINT));
       h.renderOrder = HALO_ORDER;
       add(h);
     }
@@ -722,6 +780,32 @@ function redraw() {
 }
 
 const stepOf = (a, b) => b.map((v, d) => v - a[d]).join(',');
+
+// Which way the head is pointing, in the room, or null if there is no answer.
+//
+// Taken from the DRAWN positions rather than from game.heading, so it agrees
+// with what is on screen whatever the projection has done. That matters at a
+// wrap: the model's heading says "east" while the two cells are at opposite
+// edges of the board, and a cone aimed by the model would point back along the
+// body instead of the way the snake is going.
+//
+// Null in three cases, and each gets a ball instead:
+//   - a snake one cell long, which has no direction yet
+//   - a step in w, which has no direction IN THE ROOM -- the head is about to
+//     leave the slice, and there is nowhere here to point
+//   - a step across a wrap, whose two cells are a board apart on screen
+// A cone aimed at nothing would be worse than a sphere, which at least claims
+// no direction at all.
+function headAim(body) {
+  if (body.length < 2) return null;
+  const head = body[0], neck = body[1];
+  if (wOf(head) !== wOf(neck) || !adjacent3(head, neck)) return null;
+  const a = new THREE.Vector3(...proj(neck));
+  const b = new THREE.Vector3(...proj(head));
+  const d = b.sub(a);
+  if (d.lengthSq() < 1e-9) return null;
+  return d.normalize();
+}
 // Are two cells neighbours in the three drawn axes? Every axis is walled by
 // default, but the model honours a per-axis wrap, and a body that has just
 // wrapped must not be drawn with a tube stretched across the room.

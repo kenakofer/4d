@@ -131,6 +131,11 @@ export class SliceMap {
     // hides that answer exactly where they need it, and makes the marker look
     // like a piece of maze rather than a cursor.
     this.markerStyle = 'fill';
+    // What colour a filled marker is. The game's, not the panel's: this is the
+    // player drawn flat, and a map that gives the thing you are steering a
+    // different colour from the one it has in the room is asking the player to
+    // learn it twice.
+    this.markerColour = '#8dffc8';
     // A move the player has asked for but the world has not made yet, as
     // {axis, sign} -- or null when nothing is queued.
     //
@@ -550,7 +555,7 @@ export class SliceMap {
       // The same inset the body uses, so where a segment reaches out to the
       // head the two meet flush instead of leaving a hairline seam. Square,
       // like the body it is the end of.
-      rect(fh, fv, '#8dffc8', 1, inset);
+      rect(fh, fv, this.markerColour, 1, inset);
     }
     const ring = document.createElementNS(NS, 'rect');
     // An outline-only marker is drawn just inside the cell instead of on its
