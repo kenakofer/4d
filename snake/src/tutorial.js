@@ -74,6 +74,11 @@ export const LESSONS = BOARDS.map((opts, i) => ({
 }));
 
 export const DONE = TUTORIAL.done;
+export const DIED = TUTORIAL.died;
+
+// How big a lesson's shower is next to the one at the end. A third: plainly a
+// celebration, plainly not the finish.
+const LESSON_CONFETTI = 0.35;
 
 // The flag is shared across every game, so finishing this counts everywhere.
 export { tutorialSeen, markTutorialSeen } from '../../shared/tutorial-flag.js';
@@ -91,11 +96,16 @@ import { dropConfetti } from '../../shared/confetti.js';
 export class Tutorial {
   // `onLesson(lesson)` starts a board and describes it; `onFinish()` returns
   // to the real game.
-  constructor({ onLesson, onFinish, finishLabel = TUTORIAL.finish }) {
+  // `gate` is asked before the card takes a keypress, and can refuse it -- a
+  // game with a menu open passes one so the two do not both answer the key.
+  constructor({ onLesson, onFinish, finishLabel = TUTORIAL.finish, gate = null }) {
     this.onLesson = onLesson;
     this.onFinish = onFinish;
     this.finishLabel = finishLabel;
+    this.gate = gate;
     this.step = -1;
+    // Set by start(); see `active`.
+    this.running = false;
     this.build();
   }
 
@@ -116,15 +126,95 @@ export class Tutorial {
     this.el = el;
     el.querySelector('#tutNext').addEventListener('click', () => this.next());
     el.querySelector('#tutSkip').addEventListener('click', () => this.finish());
+
+    // The death card, and the same one is reused for the end of the tutorial.
+    //
+    // It is the ordinary game's `#over` card -- same id, same stylesheet, so a
+    // lesson death looks like a death rather than like a lesson. The board
+    // stays visible behind it, which is the whole reason that card is built the
+    // way it is: seeing the wall you hit is most of what makes the next attempt
+    // better, and that is truer in a lesson than anywhere.
+    const over = document.createElement('div');
+    over.id = 'tutOver';
+    // Borrow the game-over card's look wholesale.
+    over.className = 'overlay';
+    over.innerHTML = `
+      <div class="card">
+        <h2 id="tutOverHeading"></h2>
+        <p class="cause" id="tutOverCause"></p>
+        <button id="tutOverBtn"></button>
+      </div>`;
+    document.body.appendChild(over);
+    this.over = over;
+    over.querySelector('#tutOverBtn').addEventListener('click', () => {
+      this.dismissOver();
+    });
+
+    // Space or Enter takes the button, so a retry costs no reach for the mouse
+    // -- the player's hands are already on the keys that got them killed.
+    //
+    // `gate` lets the host refuse the press. The pause menu can be opened over
+    // this card and drives itself with Enter and Space, so without it a player
+    // choosing an item in the menu would also dismiss the card behind it.
+    this._onKey = (ev) => {
+      if (!this.overShown) return;
+      if (this.gate && !this.gate()) return;
+      if (ev.key !== ' ' && ev.key !== 'Enter') return;
+      ev.preventDefault();
+      this.dismissOver();
+    };
+    addEventListener('keydown', this._onKey);
+  }
+
+  get overShown() { return this.over.classList.contains('show'); }
+
+  // Is the tutorial holding the board still?
+  //
+  // True while either of its cards is up -- a death waiting for a retry, or the
+  // finish waiting to be dismissed. The host asks this before it moves anything,
+  // so the board behind a card cannot be steered. Without it the card was a
+  // picture laid over a game that was still running: the snake kept moving under
+  // the finish screen, which says the tutorial has not really ended.
+  get frozen() { return this.overShown; }
+
+  // What the card's button does depends on why it is up: after a death it puts
+  // the lesson back, and after the last lesson it leaves the tutorial.
+  dismissOver() {
+    this.over.classList.remove('show');
+    const done = this._overIsDone;
+    this._overIsDone = false;
+    if (done) this.finish();
+    else if (this.step >= 0 && this.step < LESSONS.length) {
+      this.onLesson(LESSONS[this.step]);
+    }
+  }
+
+  showOver(heading, cause, button, isDone) {
+    this.over.querySelector('#tutOverHeading').textContent = heading;
+    this.over.querySelector('#tutOverCause').innerHTML = cause || '';
+    this.over.querySelector('#tutOverBtn').textContent = button;
+    this._overIsDone = !!isDone;
+    this.over.classList.add('show');
+    // Focus the button so Space and Enter reach it even where the window's own
+    // key handler is not what the browser routes to first.
+    this.over.querySelector('#tutOverBtn').focus();
   }
 
   start() {
     this.step = -1;
+    this.running = true;
     this.el.classList.add('show');
     this.next();
   }
 
-  get active() { return this.el.classList.contains('show'); }
+  // Whether the tutorial owns the game right now.
+  //
+  // A flag rather than "is the lesson card visible", which is what this used to
+  // ask. The finish card hides the lesson card while the tutorial is still very
+  // much running, and reading the DOM would have said the tutorial had ended
+  // the moment it put its last screen up -- handing the board back to the real
+  // game underneath the card.
+  get active() { return !!this.running; }
 
   next() {
     this.step++;
@@ -143,36 +233,56 @@ export class Tutorial {
   }
 
   // The lesson's board says the player has done it -- they ate the apple.
+  //
+  // Every lesson gets its own shower, not just the last one. Each of these is a
+  // real thing done for the first time -- moving in three dimensions, then in
+  // four -- and the moment it works is the moment worth marking. A tutorial
+  // that saved all its congratulation for the end spends three lessons giving
+  // no sign that anything has gone right.
+  //
+  // Smaller than the finish's, so the end still lands as the bigger event.
   solved() {
     if (!this.active || this.step < 0 || this.step >= LESSONS.length) return;
+    // Not on the last lesson: that one runs straight into showDone(), whose own
+    // full shower would otherwise fall on top of this one.
+    if (this.step < LESSONS.length - 1) dropConfetti(LESSON_CONFETTI);
     this.next();
   }
 
-  // They died. The lesson restarts, since the point is to do it rather than to
-  // be told about it, and losing a tutorial should cost nothing.
-  failed() {
+  // They died.
+  //
+  // The lesson restarts, since the point is to do it rather than to be told
+  // about it, and losing a tutorial should cost nothing. But it restarts when
+  // the PLAYER says so, not on a timer: a board that silently reset itself a
+  // beat after the crash gave no account of what had happened, and left the
+  // player unsure whether they had died at all or the lesson had simply moved.
+  //
+  // `cause` is the same sentence the real game's card carries -- the caller
+  // works it out, since only it knows what hit what.
+  failed(cause = '') {
     if (!this.active || this.step < 0 || this.step >= LESSONS.length) return;
-    this.onLesson(LESSONS[this.step]);
+    this.showOver(DIED.heading, cause, DIED.retry, false);
   }
 
   showDone() {
     // The last apple is the finish, so the shower falls as the card appears
     // rather than when its button is pressed.
     dropConfetti();
-    this.el.querySelector('#tutStep').textContent = '';
-    this.el.querySelector('#tutTitle').textContent = DONE.title;
-    this.el.querySelector('#tutText').innerHTML = DONE.text;
-    const next = this.el.querySelector('#tutNext');
-    next.hidden = false;
-    next.textContent = this.finishLabel;
-    this.el.querySelector('#tutSkip').textContent = '';
-    this.el.querySelector('#tutSkip').hidden = true;
-    // The final card's button finishes rather than advancing.
-    next.onclick = () => this.finish();
+    // The corner card goes: the finish is not another lesson to read beside a
+    // board still being played, it is the end of the thing.
+    this.el.classList.remove('show');
+    // And the screen freezes, exactly as a death does. Until now the tutorial
+    // ended with a card in the corner over a board that was still live, so the
+    // player could carry on steering a snake through a lesson that was already
+    // over -- which says the tutorial has not really finished, whatever the
+    // card claims. Stopping the board is what makes the ending an ending.
+    this.showOver(DONE.title, DONE.text, this.finishLabel, true);
   }
 
   finish() {
+    this.running = false;
     this.el.classList.remove('show');
+    this.over.classList.remove('show');
     this.step = -1;
     markTutorialSeen();
     this.onFinish();

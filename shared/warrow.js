@@ -29,15 +29,31 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { haloMaterial, HALO } from './halo.js';
+// The sizing arithmetic lives on the pure side, where the suite can reach
+// it. Re-exported so a game asks warrow.js for everything about an arrow.
+export { sizeFor, REF_REST, REF_FOV } from './warrowshape.js';
 
-// The arrow's length, tip to base, in cells.
+// The arrow's length, tip to base, in cells -- as seen in the MAZE, which is
+// the game these were tuned in and the one they look right in.
 //
-// Small. The arrow is a road sign, not a landmark: it has to be findable at the
-// cell you are standing at and ignorable everywhere else. The first size tried
-// was half a cell, and in a maze -- which has one of these at a large fraction
-// of its cells -- the board turned into a field of arrows with the maze behind
+// The arrow is a road sign, not a landmark: it has to be findable at the cell
+// you are standing at and ignorable everywhere else. The first size tried was
+// half a cell, and in a maze -- which has one of these at a large fraction of
+// its cells -- the board turned into a field of arrows with the maze behind
 // them, which is the fault the grey lines had, wearing a different coat.
+//
+// A size in CELLS is not by itself a size on screen, and that is what went
+// wrong everywhere else. Each game frames its board by pulling the camera back
+// a multiple of the board's width, and the multiples differ: the maze rests at
+// 2.4 board-widths through a 52-degree lens, Snake at 3.75 through a 45. The
+// same arrow came out about three quarters its maze size in Snake and rather
+// larger than it in unknot -- identical in the world, three sizes on screen.
+//
+// So this is the size at the MAZE's framing, and every other game scales it to
+// match. The arithmetic is in warrowshape.js; a game passes what its own camera
+// does to sizeFor() and hands the result to Arrows.
 export const LEN = 0.3;
+
 
 // How wide the base is, as a fraction of the length. A touch under a right
 // angle at the tip, which is the shape that reads as "arrow" at the smallest
@@ -159,7 +175,11 @@ export function arrowHaloMaterial(opacity = 1) {
 // The halo triangle: wider and longer than the arrow, but standing on the same
 // base line, so it rims the two leading edges and nothing along the bottom.
 export function haloGeometry(len = LEN, width = WIDTH) {
-  const grow = LEN * HALO;
+  // Measured against the arrow this halo is for, not against LEN. A scaled set
+  // of arrows would otherwise wear an unscaled rim -- too heavy on a small
+  // arrow and too fine on a large one, which is exactly the sort of thing that
+  // reads as "the big ones look different" rather than as a bug in the rim.
+  const grow = len * HALO;
   const w = len * width / 2 + grow;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute([
@@ -178,36 +198,57 @@ export function haloGeometry(len = LEN, width = WIDTH) {
 export const HALO_BACK = 0.012;
 
 // Aim an arrow: place it `STANDOFF` from `from`, pointing at `to`, and turn it
-// to face `eye`.
+// to face `eye` squarely.
 //
-// The direction is the honest one -- straight at the far end of the link,
-// wherever that frame has been laid out -- so an arrow always points at the
-// place the step actually goes, and swings as the ring turns.
+// The arrow is a FLAT token, and the whole reason it is flat is that it should
+// read the same from wherever the player is standing. So it is turned to face
+// the camera exactly -- its plane perpendicular to the line of sight -- and it
+// points along the link as PROJECTED onto that plane.
 //
-// Facing the camera is done by building the frame from two directions rather
-// than by lookAt: the arrow must point ALONG the link on screen, which fixes
-// its y axis, and it must face the eye, which fixes its z as nearly as the
-// first constraint allows. Gram-Schmidt is exactly that -- keep y, take the
-// component of the view direction perpendicular to it, and let x follow. An
-// ordinary lookAt would honour the facing and lose the aim.
-export function aim(mesh, from, to, eye) {
+// That last part is the trade, and it is worth stating because the earlier
+// version made the opposite one. It kept the arrow pointing along the true 3D
+// direction of the link and then faced the camera only as nearly as that
+// allowed (Gram-Schmidt: keep y, take the perpendicular component of the view
+// for z). Honest in three dimensions, and bad on screen: a link running mostly
+// toward or away from the eye left the arrow tilted steeply out of the view
+// plane, foreshortened to a sliver at exactly the angles where the player most
+// needs to see it -- and a step along w usually IS such a link, since the ring
+// lays the frames out in depth.
+//
+// Facing the camera squarely means the arrow keeps its full size and shape at
+// every angle. What it costs is that the arrow no longer points at its target
+// in three dimensions; it points there ON SCREEN, which is where the player is
+// reading it. Following it with the eye still lands on the far end.
+export function aim(mesh, from, to, eye, standoff = STANDOFF) {
   const along = to.clone().sub(from);
   if (along.lengthSq() < 1e-12) return false;
   along.normalize();
 
-  const view = eye.clone().sub(from);
-  // Straight down the link: there is no plane that both points along it and
-  // faces the eye, so the arrow would be edge on however it were turned. It is
-  // pointing at the camera, which the standoff and the halo already say more
-  // clearly than a zero-area triangle would.
-  let z = view.sub(along.clone().multiplyScalar(view.dot(along)));
-  if (z.lengthSq() < 1e-9) return false;
+  // The way the camera is looking, at this arrow. The arrow's own plane is the
+  // one perpendicular to this, which is what "facing the camera" means.
+  const z = eye.clone().sub(from);
+  if (z.lengthSq() < 1e-12) return false;
   z.normalize();
 
-  const x = new THREE.Vector3().crossVectors(along, z);
+  // The link direction flattened into that plane: drop whatever part of it runs
+  // toward or away from the eye, and what is left is the direction the link
+  // appears to go on screen.
+  const y = along.clone().addScaledVector(z, -along.dot(z));
+  // Straight down the line of sight: the link has no direction on screen at
+  // all, so there is nothing for the arrow to point along. It is pointing at
+  // the camera, which the standoff and the halo already say more clearly than
+  // a token spun to an arbitrary bearing would.
+  if (y.lengthSq() < 1e-9) return false;
+  y.normalize();
+
+  const x = new THREE.Vector3().crossVectors(y, z);
   mesh.quaternion.setFromRotationMatrix(
-    new THREE.Matrix4().makeBasis(x, along, z));
-  mesh.position.copy(from).addScaledVector(along, STANDOFF);
+    new THREE.Matrix4().makeBasis(x, y, z));
+  // Stood off along the TRUE link direction, not the projected one: the arrow
+  // should sit just outside the joint it grows from, and that joint is in the
+  // world rather than on the screen. Offsetting along the flattened direction
+  // would slide it across the ball as the camera came round.
+  mesh.position.copy(from).addScaledVector(along, standoff);
   return true;
 }
 
@@ -229,13 +270,21 @@ export class Arrows {
   // this ordering no longer decides what wins -- the depth buffer does. It
   // still settles the tie between an arrow and its OWN halo, which sit at the
   // same offset and must go down halo first.
-  constructor(parent, { order = 3, haloOrder = 2.9 } = {}) {
+  // `scale` sizes every arrow in the set, and is how a game whose camera rests
+  // further back than the maze's keeps its arrows the same size ON SCREEN --
+  // see sizeFor(), which works it out from the framing. Left at 1 the arrows
+  // are LEN cells long, which is right for a maze-framed board.
+  //
+  // Applied to the geometry once here rather than to each mesh, so an arrow is
+  // still one shared buffer however many of them a board has.
+  constructor(parent, { order = 3, haloOrder = 2.9, scale = 1 } = {}) {
     this.parent = parent;
     this.order = order;
     this.haloOrder = haloOrder;
+    this.scale = scale;
     this.group = new THREE.Group();
-    this.geo = arrowGeometry();
-    this.haloGeo = haloGeometry();
+    this.geo = arrowGeometry(LEN * scale);
+    this.haloGeo = haloGeometry(LEN * scale);
     this.items = [];
     parent.add(this.group);
   }
@@ -261,7 +310,10 @@ export class Arrows {
   // by itself as soon as the camera moves off the line.
   face(eye) {
     for (const it of this.items) {
-      const ok = aim(it.arrow, it.from, it.to, eye);
+      // The standoff scales with the arrow: it exists to bury the tail in the
+      // joint the arrow grows from, and a longer arrow parked at the old
+      // distance would stand clear of the ball instead of out of it.
+      const ok = aim(it.arrow, it.from, it.to, eye, STANDOFF * this.scale);
       it.arrow.visible = ok;
       it.halo.visible = ok;
       if (!ok) continue;

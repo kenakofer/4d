@@ -12,7 +12,7 @@
 // The arithmetic is in confettishape.js, where the suite can reach it. This
 // file only draws.
 
-import { makePieces, advance } from './confettishape.js';
+import { makePieces, advance, pieceCount } from './confettishape.js';
 import { makeRng } from './grid.js';
 
 const COLOUR_VARS = ['--ax0', '--ax1', '--ax2', '--ax3', '--accent'];
@@ -47,7 +47,13 @@ function fit() {
   return dpr;
 }
 
-export function dropConfetti() {
+// `scale` thins the shower without changing anything else about it.
+//
+// A full drop is for finishing something -- the tutorial, a knot. A lesson
+// inside the tutorial is a smaller win and wants a smaller shower: enough to
+// say "that worked", not so much that the third one in five minutes is
+// wallpaper. Same pieces, same physics, fewer of them.
+export function dropConfetti(scale = 1) {
   // Someone who has asked for less motion gets the words and not the shower.
   if (window.matchMedia
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -58,8 +64,9 @@ export function dropConfetti() {
   }
   fit();
   const rng = makeRng(Date.now());
+  const count = Math.max(1, Math.round(pieceCount(window.innerWidth) * scale));
   pieces = pieces.concat(
-    makePieces(window.innerWidth, window.innerHeight, palette(), rng));
+    makePieces(window.innerWidth, window.innerHeight, palette(), rng, count));
   if (!frame) {
     last = performance.now();
     frame = requestAnimationFrame(tick);

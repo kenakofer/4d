@@ -83,6 +83,21 @@ export class SliceMap {
     // directly above the panel: the buttons are then the legend, in the right
     // place and the right colour, and edge labels only repeat them.
     this.labels = null;
+    // How the cell the player is standing in is marked.
+    //
+    // 'fill' paints the cell solid and rings it, which is what a game whose
+    // player IS a cell wants: the snake's head is the front of its body and is
+    // drawn as one more segment, in the body's colour, so the two read as one
+    // object. Nothing is lost by covering the cell because the head is what
+    // occupies it.
+    //
+    // 'ring' draws the outline alone and leaves the cell itself showing. That
+    // is what a game whose player stands ON something wants. A maze cell holds
+    // a passage, and the passage's colour is the panel's whole answer to "which
+    // way is downhill" -- painting over the one cell the player is actually at
+    // hides that answer exactly where they need it, and makes the marker look
+    // like a piece of maze rather than a cursor.
+    this.markerStyle = 'fill';
     // A move the player has asked for but the world has not made yet, as
     // {axis, sign} -- or null when nothing is queued.
     //
@@ -393,6 +408,14 @@ export class SliceMap {
       c.setAttribute('cy', (py(this.apple[V]) + cell / 2).toFixed(2));
       c.setAttribute('r', (cell * (here ? 0.3 : 0.12)).toFixed(2));
       c.setAttribute('fill', '#24ff5e');
+      // Ringed in the panel's own background colour, so the dot keeps its shape
+      // whatever it lands on. An apple sits in a cell like any other, and that
+      // cell can already be lava or a length of snake -- green on red is a
+      // smudge, green on green is nothing at all. The ring is not a highlight,
+      // it is the gap that would be there if the cell were empty, drawn in so
+      // the apple never merges with what it is sitting on.
+      c.setAttribute('stroke', GROUND);
+      c.setAttribute('stroke-width', (cell * 0.09).toFixed(2));
       // The blink runs on both, in step with the apple in the room, so the two
       // read as one object seen two ways.
       if (this.appleFade !== undefined) {
@@ -408,22 +431,37 @@ export class SliceMap {
       this._appleMark = null;
     }
 
-    // --- the head --------------------------------------------------------
-    // Last, over everything, and ringed: this is the one mark the player looks
-    // for first, and it must never be ambiguous which cell it is in.
-    // The same inset the body uses, so where a segment reaches out to the head
-    // the two meet flush instead of leaving a hairline seam. Square, like the
-    // body it is the end of.
-    rect(fh, fv, '#8dffc8', 1, inset);
+    // --- where the player is ----------------------------------------------
+    // Last, over everything: this is the one mark the player looks for first,
+    // and it must never be ambiguous which cell it is in.
+    //
+    // Filled for a game whose player occupies the cell, an outline for one
+    // whose player stands on what the cell holds -- see markerStyle. The RING
+    // is drawn either way, because the ring is the part that says "here" and
+    // the fill only says what is standing there.
+    if (this.markerStyle === 'fill') {
+      // The same inset the body uses, so where a segment reaches out to the
+      // head the two meet flush instead of leaving a hairline seam. Square,
+      // like the body it is the end of.
+      rect(fh, fv, '#8dffc8', 1, inset);
+    }
     const ring = document.createElementNS(NS, 'rect');
-    ring.setAttribute('x', px(fh).toFixed(2));
-    ring.setAttribute('y', py(fv).toFixed(2));
-    ring.setAttribute('width', cell.toFixed(2));
-    ring.setAttribute('height', cell.toFixed(2));
+    // An outline-only marker is drawn just inside the cell instead of on its
+    // boundary. On the boundary it sits exactly where the grid lines are, and a
+    // white line on top of a grid line reads as a slightly brighter grid line;
+    // pulled in, there is ground either side of it and it reads as a ring.
+    const bare = this.markerStyle !== 'fill';
+    const rInset = bare ? cell * 0.08 : 0;
+    ring.setAttribute('x', (px(fh) + rInset).toFixed(2));
+    ring.setAttribute('y', (py(fv) + rInset).toFixed(2));
+    ring.setAttribute('width', (cell - rInset * 2).toFixed(2));
+    ring.setAttribute('height', (cell - rInset * 2).toFixed(2));
     ring.setAttribute('fill', 'none');
     ring.setAttribute('stroke', '#ffffff');
-    ring.setAttribute('stroke-width', '1.2');
-    ring.setAttribute('opacity', '0.85');
+    // Heavier when it is the only mark there is.
+    ring.setAttribute('stroke-width', bare ? '1.8' : '1.2');
+    ring.setAttribute('opacity', bare ? '0.95' : '0.85');
+    if (bare) ring.setAttribute('rx', (cell * 0.16).toFixed(2));
     svg.appendChild(ring);
 
     // --- the labels ------------------------------------------------------
@@ -541,7 +579,7 @@ export class SliceMap {
 // colour test matters wherever two things can be adjacent and are not the same
 // thing -- two players' walls touching in Tron, say -- since merging those
 // would draw one region where there are two.
-function clusters(filled) {
+export function clusters(filled) {
   const seen = new Set();
   const out = [];
   for (const [k, f] of filled) {
@@ -583,15 +621,30 @@ function clusters(filled) {
 // precisely when that corner is on the outside of the cluster. Interior corners
 // stay square and the rectangles meet flush, so the whole thing reads as one
 // rounded shape.
-function clusterPath(cells, px, py, cell, r) {
+//
+// Every one of those decisions is made in SCREEN terms, which is the part that
+// was wrong. The corners are named for where they are on the page -- top left,
+// bottom right -- so the neighbour that decides whether a top corner is exposed
+// is the cell drawn ABOVE this one, and which board coordinate that is depends
+// on the panel. On a flipped panel v+1 is drawn downward, so asking `at(h, v+1)`
+// for "up" inverted every decision: a cluster rounded its inside corners and
+// squared off its outside ones, which reads as bites taken out of a slab.
+//
+// So the neighbour lookup goes through py, the same function the rectangle is
+// drawn with. A panel cannot then disagree with itself about which way is up.
+export function clusterPath(cells, px, py, cell, r) {
   const has = new Set(cells.map(([h, v]) => h + ',' + v));
   const at = (h, v) => has.has(h + ',' + v);
+  // Which step along v is drawn upward on this panel: -1 when the axis is
+  // flipped, +1 otherwise. Read off py rather than passed in, so it cannot
+  // drift from the projection actually in use.
+  const upward = py(1) < py(0) ? 1 : -1;
   let d = '';
   for (const [h, v] of cells) {
     const x0 = px(h), x1 = px(h) + cell;
     // py gives the TOP of a cell's row, and y grows downward.
     const y0 = py(v), y1 = py(v) + cell;
-    const up = at(h, v + 1), down = at(h, v - 1);
+    const up = at(h, v + upward), down = at(h, v - upward);
     const left = at(h - 1, v), right = at(h + 1, v);
     // A corner is rounded only when both of its sides are exposed.
     const tl = !up && !left ? r : 0;

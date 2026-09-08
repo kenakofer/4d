@@ -227,7 +227,7 @@ button:hover, select:hover { border-color: var(--accent); }
 @media (max-width: 620px) {
   #pauseBtn { top: 8px; right: 8px; }
   /* The button moves up, so the card's clearance follows it. */
-  #over { padding: 50px 8px 8px; }
+  #over, #tutOver { padding: 50px 8px 8px; }
 }
 
 /* Any short window -- a phone in landscape included -- has no room for the map
@@ -255,7 +255,7 @@ button:hover, select:hover { border-color: var(--accent); }
    games all aim the camera at the middle of the world, so the most
    interesting part of the final frame is precisely what a centred card hides.
    --------------------------------------------------------------------- */
-#over {
+#over, #tutOver {
   position: fixed; inset: 0; display: none; z-index: 20;
   /* Darker than the old 62%, since the blur is no longer helping to separate
      the card from what is behind it. */
@@ -270,8 +270,8 @@ button:hover, select:hover { border-color: var(--accent); }
      button you cannot see is a button that is not there. */
   padding: 62px 14px 14px;
 }
-#over.show { display: grid; }
-#over .card {
+#over.show, #tutOver.show { display: grid; }
+#over .card, #tutOver .card {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   padding: 26px 32px; text-align: center; min-width: 240px;
   /* A stronger shadow than a centred card needs: in a corner, over a board
@@ -279,13 +279,18 @@ button:hover, select:hover { border-color: var(--accent); }
      rather than in it. */
   box-shadow: 0 18px 50px rgba(0, 0, 0, .7);
 }
-#over h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: .02em; }
-#over .cause { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
+#over h2, #tutOver h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: .02em; }
+#over .cause, #tutOver .cause { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
 #over .score { font-size: 40px; font-weight: 700; line-height: 1.1;
                color: var(--accent); }
+/* The tutorial's card says a sentence or two rather than showing a number, so
+   its text needs a measure to wrap at -- the score card's `min-width` alone
+   would let a paragraph run the width of the screen. */
+#tutOver .card { max-width: 380px; }
+#tutOver .cause { line-height: 1.5; }
 #over .scorelbl { color: var(--dim); font-size: 11px; letter-spacing: .12em;
                   text-transform: uppercase; margin-bottom: 18px; }
-#over button { font-size: 14px; padding: 8px 20px; }
+#over button, #tutOver button { font-size: 14px; padding: 8px 20px; }
 
 /* ---------------------------------------------------------------------
    The pause menu.
@@ -322,7 +327,12 @@ button:hover, select:hover { border-color: var(--accent); }
   padding: 9px 14px; cursor: pointer;
   transition: border-color .12s, background .12s;
 }
+/* Hover, keyboard focus and the menu's own selection all look the same, because
+   they all mean the same thing: this is the row that will run if you commit.
+   The class is what the arrow keys set -- see select() in pause.js, which
+   explains why the browser's focus ring cannot be relied on alone. */
 #pause .items > *:hover,
+#pause .items > *.on,
 #pause .items > *:focus-visible {
   border-color: var(--accent); background: #232c3b; outline: none;
 }
@@ -366,12 +376,25 @@ button:hover, select:hover { border-color: var(--accent); }
 #tut .row { display: flex; gap: 8px; align-items: center; margin-top: 11px; }
 #tut .row:empty { display: none; }
 #tut button { font-size: 13px; padding: 6px 16px; }
-/* Skip is available throughout but never the obvious thing to press. */
+/* Skip is available throughout but never the obvious thing to press.
+ *
+ * It used to be drawn with no background and no border, which made it a word
+ * floating on the card rather than a control -- and on the card's own ground
+ * there was nothing to tell you it could be clicked at all. It now takes the
+ * pause menu's treatment, which is the shape a secondary action has everywhere
+ * else in these games: a panel-dark plate with a quiet border, lifting to the
+ * accent on hover. It stays subordinate to the primary button beside it by
+ * being DIMMER, not by being invisible. */
 #tut button.quiet {
-  background: none; border-color: transparent; color: var(--dim);
-  padding: 6px 8px;
+  background: #1e2634; border: 1px solid var(--line); color: var(--dim);
+  padding: 6px 14px; border-radius: 8px;
+  transition: border-color .12s, background .12s, color .12s;
 }
-#tut button.quiet:hover { color: var(--ink); border-color: var(--line); }
+#tut button.quiet:hover,
+#tut button.quiet:focus-visible {
+  color: var(--ink); border-color: var(--accent); background: #232c3b;
+  outline: none;
+}
 
 @media (max-width: 620px) {
   #tut { top: 8px; left: 8px; right: 8px; transform: none; max-width: none; }
@@ -431,11 +454,28 @@ button:hover, select:hover { border-color: var(--accent); }
   /* On a touch screen the BUTTONS set the width, not the maps: 44px is the size
      a thumb hits without aiming, so each cluster gets three of those and the map
      above takes the same width. */
-  .mapcols { gap: 8px; justify-content: center; }
+  .mapcols { gap: 6px; justify-content: center; }
   .mapcol { width: 138px; flex: 0 0 auto; }
   .mapcols svg { width: 138px; height: 138px; }
   /* And within each column the keys go BELOW the map they belong to: at the
      bottom of the screen the lowest thing is the nearest thing. */
   .mapcol { flex-direction: column-reverse; }
-  .mapcol .padcluster { margin-bottom: 0; margin-top: 8px; }
+  .mapcol .padcluster { margin-bottom: 0; margin-top: 6px; }
+
+  /* Tighter all round than on a desktop, and only here.
+   *
+   * A phone is spending its screen on two maps and eight buttons that each have
+   * to stay thumb-sized, so every millimetre of padding around them comes
+   * straight out of the board above. The gaps are trimmed rather than the
+   * targets: the buttons keep their size, and what goes is the air between and
+   * around them. The panel's own padding shrinks furthest, since a panel edge
+   * this close to the screen edge is already reading as a boundary without help
+   * from a wide margin.
+   *
+   * Keyed to the panel that HOLDS a map pair, so a game's other panels keep the
+   * comfortable spacing -- this is a fix for a crowded control surface, not a
+   * house style for phones. */
+  .panel.mapcols, .panel:has(.mapcols) { padding: 6px; }
+  .mapcols .padcluster { gap: 4px; }
+  .mapfoot { margin-top: 2px; }
 }

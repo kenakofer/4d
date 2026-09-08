@@ -10,13 +10,13 @@ export const HUD = {
   // What the game is, in the tone the other two use on the landing page: what
   // you do first, then the catch.
   blurb: 'Find the path to the exit', //kenan approved
-  // The two counters. "Steps" rather than "moves" because a step is a thing you
+  // The one counter. "Steps" rather than "moves" because a step is a thing you
   // can see on the map -- one segment of rope -- and a move is not.
+  //
+  // How far the exit still is used to sit beside it, and it gave the maze away:
+  // a number that falls when you guess right turns the search into following a
+  // dial, and there is nothing left to work out.
   steps: 'Steps', //kenan approved
-  // How far the exit is as the crow flies, which in four dimensions is not a
-  // number anyone can eyeball. Giving it turns the maze from a search into a
-  // judgement about which direction is worth trying.
-  toGo: 'To go', //kenan approved
   padFoot: 'menu · drag to look', //kenan approved
 };
 
@@ -28,14 +28,20 @@ export const HUD = {
 // ---------------------------------------------------------------------------
 
 export const FOURTH = {
-  // Shown the first time the player stands at a junction with a w passage.
-  // Deliberately about what is on screen -- an arrow pointing off at nothing --
-  // rather than about dimensions in the abstract.
-  firstSight: '',
   // The label on such a passage in the legend beside the board.
   legend: '',
   // And the other mark worth explaining: the places where you have to choose.
   legendJunction: '',
+  // The two cells that are not like the others: where the player is standing
+  // and where they are going.
+  //
+  // Neither is only a colour, so neither is fully described by a swatch. The
+  // player's cell wears a blinking cage and casts marks on the walls saying
+  // where it sits along each axis; the exit pulses. The legend can show the
+  // colours and nothing else, so if either of those needs saying, here is
+  // where it gets said.
+  legendStart: '',
+  legendExit: '',
 };
 
 export const WON = {
@@ -43,7 +49,6 @@ export const WON = {
   // The stat that is worth knowing at the end: how much of the maze you walked
   // versus how little you needed to.
   yourSteps: 'You took', //kenan approved
-  shortest: 'The short way was',
   // Composed rather than glued together at the call site, so the whole sentence
   // is readable here. See CLAUDE.md.
   summary: (took, best) => took === best
@@ -53,16 +58,7 @@ export const WON = {
   playAgain: 'New maze', //kenan approved
 };
 
-// What each axis is called in a panel footer. Single letters, because the
-// footer is a caption under a small square and a word would not fit -- and
-// because x, y, z and w are what the axes are called everywhere else in these
-// games, including in the prose that teaches them.
-export const AXIS_NAME = ['x', 'y', 'z', 'w']; //kenan approved
-
-// The slice panels' footers, naming the axes each one holds still. Worded
-// exactly as Snake's are: a player who reads one should not have to learn a
-// second phrasing for the same idea.
-export const PANELS = { //kenan approved
-  heldFixed: (axis, value) => `${axis} <b>${value}</b> held fixed`, //kenan approved
-  pair: (a, av, b, bv) => `${a} <b>${av}</b> &middot; ${b} <b>${bv}</b>`, //kenan approved
-};
+// The axis letters and the panel footers are the same words in every game here,
+// so they live in shared/copy.js and are re-exported rather than restated. See
+// the note there.
+export { AXIS_NAME, PANELS } from '../../shared/copy.js';

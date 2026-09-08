@@ -109,10 +109,28 @@ export const TUTORIAL = {
     text: 'You\'ve taken your first steps to move and play in 4D! You ' + //kenan approved
           'can get back to this tutorial from the pause menu anytime.' //kenan approved
   },
+
+  // Dying in a lesson.
+  //
+  // The ordinary game says what killed you in a sentence -- see WARD and VERBS
+  // above -- and a lesson should not be quieter about it than the real game is.
+  // It used to restart on its own after a beat, which taught the player nothing
+  // and left them wondering whether they had done something or the board had.
+  //
+  // The words are gentler here on purpose. In the real game a death ends a run
+  // worth mourning; in a lesson it costs nothing, and the card should say so
+  // and get out of the way.
+  died: {
+    heading: 'Not quite',
+    // The button that puts the same lesson back. The lesson is unchanged, which
+    // is the point: the board that just beat you is the board you get to try
+    // again, rather than a fresh one that might be easier.
+    retry: 'Try again',
+    retryKey: 'Space',
+  },
 };
 
-// The slice panels' footers, which name the axes each is holding still.
-export const PANELS = {
-  heldFixed: (axis, value) => `${axis} <b>${value}</b> held fixed`, //kenan approved
-  pair: (a, av, b, bv) => `${a} <b>${av}</b> &middot; ${b} <b>${bv}</b>`, //kenan approved
-};
+// The slice panels' footers, which name the axes each is holding still, and the
+// letters those axes go by. The same words in every game here, so they live in
+// shared/copy.js and are re-exported rather than restated.
+export { AXIS_NAME, PANELS } from '../../shared/copy.js';

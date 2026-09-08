@@ -2,6 +2,7 @@ import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Puzzle, planPush, pushWithRoom, reversePath, rampAt } from './knot.js';
 import { Orbit, bindPinch } from '../../shared/orbit.js';
+import { Sky } from '../../shared/sky.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { LEVELS } from './levels.js';
 import { HUD } from './copy.js';
@@ -10,7 +11,7 @@ import { PauseMenu } from '../../shared/pause.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { dropConfetti } from '../../shared/confetti.js';
 import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
-import { Arrows } from '../../shared/warrow.js';
+import { Arrows, sizeFor } from '../../shared/warrow.js';
 
 let scene, camera, renderer, raycaster, orbit;
 // Start of the rock's clock, so both views swing from the same phase.
@@ -53,6 +54,9 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0e1116);
+  // And stars behind it. The flat background stays as the ground they are drawn
+  // on -- a star is added light, so it needs something to be added to.
+  new Sky(scene);
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   raycaster = new THREE.Raycaster();
 
@@ -398,7 +402,10 @@ function rebuildRope() {
   // The arrows marking w-steps. They sit on gridGroup with the rope and are
   // rebuilt with it, but they are turned to face the camera every frame, so the
   // set outlives any one rebuild and is only emptied here.
-  if (!arrows) arrows = new Arrows(gridGroup);
+  // Sized for this game's framing -- the same 2.4 board-widths the maze uses,
+  // but through a 45-degree lens rather than 52, which alone makes a maze-sized
+  // arrow about three quarters the size here. See shared/warrow.js.
+  if (!arrows) arrows = new Arrows(gridGroup, { scale: sizeFor(2.4, 45) });
   arrows.clear();
   const group = new THREE.Group();
   const n = pz.path.length;

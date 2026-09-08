@@ -61,3 +61,24 @@ export const PAUSE = {
   soundOn: 'Sound: On', //kenan approved
   soundOff: 'Sound: Off', //kenan approved
 };
+
+// What each axis is called where a label has room for one character. Single
+// letters, because these appear as captions under small squares and in a status
+// line where a word would not fit -- and because x, y, z and w are what the axes
+// are called everywhere else in these games, including in the prose that
+// teaches them.
+export const AXIS_NAME = ['x', 'y', 'z', 'w']; //kenan approved
+
+// The slice panels' footers, naming the axes each one holds still, and the
+// status line that counts in the same voice.
+//
+// Shared because a player who reads one of these in Snake should not have to
+// learn a second phrasing for the same idea in the Maze. They lived in both
+// games' own copy files, character for character identical, which is two places
+// to edit one sentence and two places for it to drift.
+export const PANELS = { //kenan approved
+  heldFixed: (axis, value) => `${axis} <b>${value}</b> held fixed`, //kenan approved
+  pair: (a, av, b, bv) => `${a} <b>${av}</b> &middot; ${b} <b>${bv}</b>`, //kenan approved
+  // One label and its number, for a readout with nothing to pair it with.
+  single: (a, av) => `${a} <b>${av}</b>`, //kenan approved
+};

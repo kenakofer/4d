@@ -32,6 +32,7 @@ import { PauseMenu } from '../../shared/pause.js';
 import { HUD, CONTROLLER, ROUND_OVER, computerName, WARD, VERBS,
          VERBS_BY_DIR } from './copy.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
+import { Sky } from '../../shared/sky.js';
 
 let scene, camera, renderer, game, ring, world, pads, pause, props, pad;
 
@@ -89,6 +90,9 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
+  // And stars behind it. The flat background stays as the ground they are drawn
+  // on -- a star is added light, so it needs something to be added to.
+  new Sky(scene);
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   addLights(scene);
 

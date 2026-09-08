@@ -102,25 +102,38 @@ export class Pad {
     this.showHosts();
   }
 
-  // Note a key press and hide any cluster whose keys are all now known.
+  // Note a key press, and once EVERY key is known take the whole pad away at
+  // once.
   //
-  // Per HOST rather than all at once, so a two-player game hides each player's
-  // cluster when that player has learned theirs -- one player's fluency should
-  // not remove the other's controls.
+  // All eight together rather than a cluster at a time. The pad is one control
+  // surface and it should leave as one: hiding each half the moment its own
+  // four keys had been used meant a player who had learned the arrows but not
+  // WASD watched half the furniture vanish mid-game and the panels jump up
+  // under it, then went through the same lurch again later. Two interruptions
+  // where the player earned none, and in between a lopsided pad that looked
+  // like a bug.
+  //
+  // It also reads better as a reward. Losing the training wheels is one moment
+  // that happens when you have shown you can move in four dimensions -- not a
+  // slow erosion of the controls as you go.
+  //
+  // Only directions the board actually HAS are required. A 2D lesson has no W
+  // and no ana, and waiting for keys that do nothing there would mean the pad
+  // never leaves on the very boards a beginner sees first.
   noteKey(dir) {
     if (!this.teachOnly) return;
     this.used.add(dir.key);
-    this.hosts.forEach((host, i) => {
-      const mine = this.dirsFor(i);
-      if (!mine.every((b) => this.used.has(b.key))) return;
-      if (host.classList.contains('taught')) return;   // already going
+    const wanted = this.dirs.filter((b) => this.isPresent(b.axis, b.sign));
+    if (!wanted.every((b) => this.used.has(b.key))) return;
+    for (const host of this.hosts) {
+      if (host.classList.contains('taught')) continue;   // already going
       host.classList.add('taught');
       // Give the space back once the fade has finished, so the panels below
       // move into somewhere already empty rather than pulling the pad out from
       // under themselves. Timed rather than driven by transitionend, which does
       // not fire if the element is hidden or the transition is interrupted.
       host._goneTimer = setTimeout(() => host.classList.add('gone'), 500);
-    });
+    }
   }
 
   showHosts() {

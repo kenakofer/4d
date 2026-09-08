@@ -7,8 +7,8 @@ import { Ring, Slide, SLIDE_DONE } from '../shared/ring.js';
 import { rockAt, ROCK, NOD, PERIOD, NOD_PERIOD } from '../shared/rock.js';
 import { step, unitDirs, allCells, Box, randomBox, makeRng, eq as cellEq, key }
   from '../shared/grid.js';
-import { DIRECTIONS, KEYMAP, dirVec } from '../shared/pad.js';
-import { SliceMap } from '../shared/slicemap.js';
+import { DIRECTIONS, KEYMAP, dirVec, Pad } from '../shared/pad.js';
+import { SliceMap, clusterPath } from '../shared/slicemap.js';
 import { pulseAt, PULSE_PERIOD, blinkPhase, BLINK_PERIOD }
   from '../shared/rock.js';
 import { sidesAt, ngonRadius, tableW, tableFit, TABLE_MARGIN, SHAPE_LOOP }
@@ -24,6 +24,11 @@ import { armMask, armsOf, sleeveFraction, inSleeve, ARM_DIRS }
 import { makePieces, advance, pieceCount, COUNT, COUNT_WIDTH, SIZE, STAGGER,
   GRAVITY, DRAG }
   from '../shared/confettishape.js';
+import { sizeFor, onScreen, REF_REST, REF_FOV } from '../shared/warrowshape.js';
+import { starDirection, starBrightness, starSize, makeStars, DIM, BRIGHT,
+  MIN_SIZE } from '../shared/skyshape.js';
+import { visibleWalls, wallSquare, cellMarks, WALL_NUDGE }
+  from '../shared/wallmark.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra = '') {
@@ -488,16 +493,237 @@ console.log('\nthe slice map');
   m.focus = [3, 4];
   ok('in 2D everything is in slice', m.inSlice([9, 0]) && m.inSlice([0, 9]));
 }
+{
+  // How the cell the player stands in is marked depends on what standing there
+  // MEANS. A snake's head occupies its cell and is drawn filled, as one more
+  // segment of the body. A maze walker stands on a passage whose colour is the
+  // panel's whole hint about which way is downhill, so their cell is ringed and
+  // left showing rather than painted over.
+  const m = new SliceMap(null, { axes: [3, 1], dims: [6, 6, 6, 6] });
+  eq('a cell is filled by default', m.markerStyle, 'fill');
+  m.markerStyle = 'ring';
+  eq('and can be asked for as an outline instead', m.markerStyle, 'ring');
+}
+
+console.log('\na cluster rounds the corners on its outside');
+{
+  // A slab of lava is drawn as one rounded shape, and which corners get the
+  // rounding is the whole difference between a slab and a heap of tiles. A
+  // corner rounds when both sides meeting there are exposed -- that is exactly
+  // when it is on the outside of the cluster.
+  //
+  // The decision is made in SCREEN terms: "top left" is the corner at the top
+  // left of the drawn rectangle. So the neighbour that decides it is the cell
+  // drawn ABOVE, which on a flipped panel is v-1 rather than v+1. Getting that
+  // backwards inverts every decision, and the panel comes out with its inside
+  // corners rounded and its outside ones square.
+  //
+  // Corners are read back off the path: an arc appears at a corner exactly when
+  // that corner is rounded, and the arcs are emitted in a fixed order --
+  // top-right, bottom-right, bottom-left, top-left -- so which ones are present
+  // says which corners were rounded.
+  const cell = 10;
+  const px = (h) => h * cell;
+  const upward = (v) => (2 - v) * cell;     // larger v drawn higher
+  const flipped = (v) => v * cell;          // larger v drawn lower
+
+  // Which corners of the cell at (h, v) are rounded, as [tr, br, bl, tl].
+  const corners = (cells, py, h, v) => {
+    // One subpath per cell, in the order `cells` was given.
+    const subs = clusterPath(cells, px, py, cell, 3).split('M').slice(1);
+    const i = cells.findIndex(([ch, cv]) => ch === h && cv === v);
+    const sub = subs[i];
+    // An arc is a Q. Their positions in the subpath give the corners in order.
+    const qs = [...sub.matchAll(/Q/g)].length;
+    // Rebuild which of the four are present by walking the path's fixed shape:
+    // L, [Q], L, [Q], L, [Q], L, [Q]. Splitting on L and asking whether each
+    // piece carries a Q gives the four flags directly.
+    const parts = sub.split('L').slice(1);
+    const flags = parts.map((t) => t.includes('Q'));
+    ok(`a cell's path lists four corners (${h},${v})`, flags.length === 4);
+    ok(`and its arc count agrees (${h},${v})`,
+       flags.filter(Boolean).length === qs);
+    return flags;
+  };
+
+  // Two cells stacked in v: (0,0) and (0,1). Whichever way the panel is drawn,
+  // the pair is one bar and the two corners where they MEET must stay square.
+  const pair = [[0, 0], [0, 1]];
+
+  // Unflipped: v=1 is drawn above v=0. So v=0 keeps its bottom corners rounded
+  // and squares its top ones, where the other cell sits.
+  {
+    const [tr, br, bl, tl] = corners(pair, upward, 0, 0);
+    ok('the lower cell rounds the two corners on the outside',
+       br && bl);
+    ok('and squares the two where its neighbour joins', !tr && !tl);
+  }
+  // Flipped: v=1 is drawn BELOW v=0, so the same cell's exposed corners are now
+  // the top pair. This is the case that was inverted.
+  {
+    const [tr, br, bl, tl] = corners(pair, flipped, 0, 0);
+    ok('flipping the panel moves the rounding to the other end',
+       tr && tl);
+    ok('and the joint stays square there too', !br && !bl);
+  }
+  // A lone cell is rounded all the way round on either panel: nothing is
+  // touching it, so no corner is interior.
+  {
+    const solo = [[0, 0]];
+    ok('a cell on its own rounds every corner',
+       corners(solo, upward, 0, 0).every(Boolean) &&
+       corners(solo, flipped, 0, 0).every(Boolean));
+  }
+  // And a cell walled in on all four sides rounds none of them.
+  {
+    const plus = [[1, 1], [0, 1], [2, 1], [1, 0], [1, 2]];
+    ok('a cell with neighbours all round rounds none',
+       corners(plus, upward, 1, 1).every((f) => !f) &&
+       corners(plus, flipped, 1, 1).every((f) => !f));
+  }
+}
+
+{
+  // A lesson's shower is a thinned version of the finish's, not a different
+  // effect: same pieces, same physics, fewer of them. `count` is what
+  // dropConfetti scales, so what matters is that makePieces honours it exactly
+  // and that the pieces are otherwise indistinguishable.
+  const rng = makeRng(7);
+  const pal = ['#fff'];
+  const full = pieceCount(1200);
+  const some = makePieces(1200, 800, pal, rng, Math.round(full * 0.35));
+  eq('a thinned shower has the count it was asked for',
+     some.length, Math.round(full * 0.35));
+  ok('and it is genuinely fewer than a full one', some.length < full);
+  ok('every piece still falls from above the screen',
+     some.every((q) => q.y <= 0));
+  ok('and carries a colour from the palette',
+     some.every((q) => pal.includes(q.color)));
+  // The default is still the full shower, so a caller that says nothing gets
+  // what it always got.
+  eq('asking for nothing in particular gives a full shower',
+     makePieces(1200, 800, pal, makeRng(7)).length, full);
+}
+
+console.log('\nthe sky is evenly scattered');
+{
+  // Stars go on the unit sphere, spread evenly over it. The camera orbits all
+  // the way round and tips well up, so any patch left empty is a hole the
+  // player can find by looking.
+  const on = (u, v) => {
+    const d = starDirection(u, v);
+    return Math.hypot(d[0], d[1], d[2]);
+  };
+  ok('every direction is a unit vector',
+     [[0, 0], [0.5, 0.5], [1, 1], [0.13, 0.87], [0, 1], [1, 0]]
+       .every((uv) => close(on(uv[0], uv[1]), 1, 1e-12)));
+  // u drives height directly, which is the trick that keeps the spread even:
+  // equal steps in u must give equal steps in y, not in the polar angle.
+  eq('u = 0 is the south pole', +starDirection(0, 0)[1].toFixed(9), -1);
+  eq('u = 1 is the north pole', +starDirection(1, 0)[1].toFixed(9), 1);
+  eq('and halfway is the equator', +starDirection(0.5, 0)[1].toFixed(9), 0);
+  // The real claim: bands of equal height get equal numbers. Picking the polar
+  // angle evenly instead would crowd the poles, which shows as two bright caps.
+  {
+    const rng = makeRng(11);
+    const N = 20000, bands = 4;
+    const counts = new Array(bands).fill(0);
+    for (let i = 0; i < N; i++) {
+      const y = starDirection(rng(), rng())[1];
+      counts[Math.min(bands - 1, Math.floor(((y + 1) / 2) * bands))]++;
+    }
+    const want = N / bands;
+    ok('equal bands of height hold equal numbers of stars',
+       counts.every((c) => Math.abs(c - want) < want * 0.06), counts.join(' '));
+  }
+
+  // Brightness is biased hard toward the dim end, so a few stars stand out of
+  // many faint ones rather than the sky reading as an even grey dusting.
+  eq('the dimmest draw is the floor', +starBrightness(0).toFixed(9), DIM);
+  eq('the brightest is the ceiling', +starBrightness(1).toFixed(9), BRIGHT);
+  ok('and the middle of the range is well below the middle of the scale',
+     starBrightness(0.5) < DIM + (BRIGHT - DIM) * 0.25);
+  {
+    const rng = makeRng(5);
+    let bright = 0;
+    for (let i = 0; i < 5000; i++) if (starBrightness(rng()) > 0.6) bright++;
+    ok('most of the sky is faint', bright / 5000 < 0.25, `${bright}/5000`);
+  }
+
+  // Size follows brightness, with a floor so the faintest do not fall below a
+  // pixel and flicker as the camera turns.
+  eq('the faintest star still has a size', +starSize(0).toFixed(9), MIN_SIZE);
+  eq('the brightest is full size', +starSize(1).toFixed(9), 1);
+  ok('and size rises with brightness', starSize(0.7) > starSize(0.3));
+
+  // The whole sky, as the drawing side asks for it.
+  {
+    const sky = makeStars(200, makeRng(3));
+    eq('a sky has the count it was asked for', sky.count, 200);
+    eq('with a direction per star', sky.dirs.length, 600);
+    eq('a brightness per star', sky.bright.length, 200);
+    eq('and a size per star', sky.size.length, 200);
+    let offSphere = 0;
+    for (let i = 0; i < 200; i++) {
+      const r = Math.hypot(sky.dirs[i * 3], sky.dirs[i * 3 + 1], sky.dirs[i * 3 + 2]);
+      if (!close(r, 1, 1e-6)) offSphere++;
+    }
+    eq('every star lands on the sphere', offSphere, 0);
+    // Seeded, so a board's sky is the same room every visit.
+    const again = makeStars(200, makeRng(3));
+    ok('and the same seed gives the same sky',
+       [...sky.dirs].every((v, i) => v === again.dirs[i]));
+  }
+}
+
+console.log('\nthe w arrows are one size across the games');
+{
+  // LEN is a size in CELLS, and a size in cells is not a size on screen: each
+  // game frames its board by pulling the camera back a multiple of the board's
+  // width, and the multiples differ. sizeFor() is what puts them back on one
+  // footing, so what these check is that a LEN-sized arrow scaled by it covers
+  // the SAME fraction of the screen in every game.
+  // What each game actually does. Snake pulls back furthest; unknot looks
+  // through the narrowest lens.
+  const games = [
+    { name: 'maze', rest: 2.4, fov: 52 },
+    { name: 'unknot', rest: 2.4, fov: 45 },
+    { name: 'snake', rest: (4.2) / 1.12, fov: 45 },
+  ];
+
+  eq('the maze is the reference and is left alone', +sizeFor(2.4, 52).toFixed(6), 1);
+
+  // LEN itself lives in warrow.js, which imports three.js and so cannot be
+  // reached from here. Its value is the one thing this needs, and any length
+  // would do: the claim is that the SCALED length covers the same fraction
+  // everywhere, which does not depend on what the unscaled one is.
+  const LEN = 0.3;
+  const sizes = games.map((g) => onScreen(LEN * sizeFor(g.rest, g.fov), g.rest, g.fov));
+  ok('every game draws its arrows the same size on screen',
+     sizes.every((v) => close(v, sizes[0], 1e-12)),
+     sizes.map((v, i) => `${games[i].name}=${v.toFixed(5)}`).join(' '));
+
+  // The direction of the correction, which is the part that is easy to get
+  // upside down. A camera FURTHER back must scale UP; a WIDER lens must too,
+  // since the same angle is a smaller share of a wider view.
+  ok('a camera further back asks for a bigger arrow',
+     sizeFor(4.0, 52) > sizeFor(2.4, 52));
+  ok('and a wider lens does too', sizeFor(2.4, 70) > sizeFor(2.4, 52));
+  // Unknot's narrower lens already draws arrows larger than the maze's, so its
+  // correction goes the other way. This is the case that catches the formula
+  // being inverted.
+  ok('a narrower lens asks for a smaller one', sizeFor(2.4, 45) < 1);
+}
 
 console.log('\nthe pad teaches itself away');
 {
-  // The Pad's hide rule is DOM-driven, so what is testable here is the split
-  // that decides which keys belong to which cluster -- and therefore which set
-  // of keys has to be pressed before a cluster goes quiet.
+  // The pad LEAVES as one -- every key has to be used before any of it goes --
+  // but it is still LAID OUT as two clusters, and that split is what these test.
   //
-  // Each cluster must be complete on its own: a player who has learned WASD
-  // should lose WASD and keep the arrows, so the two sets have to partition
-  // the eight directions rather than overlap or leave one out.
+  // The two sets have to partition the eight directions rather than overlap or
+  // leave one out: each cluster is an inverted T standing above the panel whose
+  // plane its keys move in, so a direction in neither would have nowhere to be
+  // drawn and one in both would be drawn twice.
   const vertical = DIRECTIONS.filter((d) => d.axis === 1 || d.axis === 3);
   const horizontal = DIRECTIONS.filter((d) => d.axis !== 1 && d.axis !== 3);
   eq('four keys in the vertical cluster', vertical.length, 4);
@@ -512,6 +738,78 @@ console.log('\nthe pad teaches itself away');
      ['w', 's', 'a', 'd'].every((k) => vertical.some((d) => d.key === k)));
   ok('horizontal holds the four arrows',
      horizontal.every((d) => d.key.startsWith('Arrow')));
+}
+{
+  // The hide rule itself, against a stub standing in for the two cluster divs.
+  //
+  // The rule is: nothing goes until every direction the BOARD HAS has been
+  // pressed on a keyboard, and then both clusters go together. The board part
+  // matters -- a 2D lesson has no W and no ana, and a pad that waited for keys
+  // that do nothing there would never leave on the boards a beginner meets
+  // first.
+  const stubHost = () => {
+    const set = new Set();
+    return {
+      innerHTML: '',
+      appendChild() {},
+      classList: {
+        add: (c) => set.add(c),
+        remove: (...cs) => cs.forEach((c) => set.delete(c)),
+        contains: (c) => set.has(c),
+        toggle: (c, on) => (on ? set.add(c) : set.delete(c)),
+      },
+      _classes: set,
+    };
+  };
+  // document.createElement is all Pad needs beyond the hosts themselves.
+  const priorDoc = globalThis.document;
+  globalThis.document = {
+    createElement: () => ({
+      className: '', dataset: {}, innerHTML: '', title: '',
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+      addEventListener() {},
+    }),
+  };
+
+  const taught = (hosts) => hosts.filter((h) => h._classes.has('taught')).length;
+
+  // A full 4D board: all eight are present, so all eight are required.
+  {
+    const hosts = [stubHost(), stubHost()];
+    const pad = new Pad(hosts, { onPush() {}, teachOnly: true });
+    for (const d of DIRECTIONS.filter((b) => b.axis === 1 || b.axis === 3)) {
+      pad.noteKey(d);
+    }
+    eq('learning one cluster hides nothing on its own', taught(hosts), 0);
+    for (const d of DIRECTIONS.filter((b) => b.axis !== 1 && b.axis !== 3)) {
+      pad.noteKey(d);
+    }
+    eq('and the last key takes both clusters at once', taught(hosts), 2);
+  }
+
+  // A flat board: only the four arrows exist, so the four arrows are enough.
+  {
+    const hosts = [stubHost(), stubHost()];
+    const pad = new Pad(hosts, {
+      onPush() {}, teachOnly: true,
+      isPresent: (axis) => axis === 0 || axis === 2,
+    });
+    for (const d of DIRECTIONS.filter((b) => b.axis === 0 || b.axis === 2)) {
+      pad.noteKey(d);
+    }
+    eq('a board without W or ana does not wait for them', taught(hosts), 2);
+  }
+
+  // And a pad that was never asked to teach never hides, however much is used.
+  {
+    const hosts = [stubHost(), stubHost()];
+    const pad = new Pad(hosts, { onPush() {} });
+    for (const d of DIRECTIONS) pad.noteKey(d);
+    eq('a pad that is not a teaching aid stays put', taught(hosts), 0);
+  }
+
+  if (priorDoc === undefined) delete globalThis.document;
+  else globalThis.document = priorDoc;
 }
 
 console.log('\nthe soft pulse');
@@ -1244,6 +1542,90 @@ console.log('\nthe shape of a joint halo');
   // unrecognised joint must do: err toward drawing the outline, not toward
   // punching holes in it.
   ok('no arms means no cut', !inSleeve(at(0), 0, s));
+}
+
+console.log('\nmarks on the walls');
+{
+  // A 4x4x4 room whose lowest cell centre is the origin, so its walls stand at
+  // -0.5 and 3.5 on each axis.
+  const origin = [0, 0, 0], dims = [4, 4, 4];
+  const axesOf = (ws) => ws.map((w) => w.axis).sort().join('');
+  const atsOf = (ws, axis) =>
+    ws.filter((w) => w.axis === axis).map((w) => w.at);
+
+  // Standing outside one corner of the box, the eye sees three walls -- the
+  // three far ones, one per axis. This is the ordinary case and the one the
+  // marks are laid out for.
+  const corner = visibleWalls([-6, -6, -6], origin, dims);
+  eq('from outside a corner, three walls show', corner.length, 3);
+  eq('one per axis', axesOf(corner), '012');
+  ok('and each is the FAR wall of its axis',
+     corner.every((w) => w.at > 3));
+
+  // Walking round to the opposite corner shows the other three: the marks
+  // follow the camera rather than being painted on fixed walls.
+  const other = visibleWalls([9, 9, 9], origin, dims);
+  eq('from the opposite corner, three again', other.length, 3);
+  ok('but the near ones this time', other.every((w) => w.at < 0));
+
+  // Inside the box every wall faces the viewer -- there is no wall you are
+  // outside of -- which is six.
+  eq('from inside, every wall shows',
+     visibleWalls([2, 2, 2], origin, dims).length, 6);
+
+  // The interesting middle case, and the reason this is a function rather than
+  // a constant: an eye level with the box in y but outside it in x and z sees
+  // BOTH y walls plus one each of x and z. Four, not three. Getting this wrong
+  // is what leaves a mark on a wall the player is looking at the back of.
+  const side = visibleWalls([-6, 2, -6], origin, dims);
+  eq('level with the box, four walls show', side.length, 4);
+  eq('both of them on the axis the eye is inside',
+     atsOf(side, 1).length, 2);
+
+  // The nudge pulls each wall inward, never outward: a mark pushed the wrong
+  // way sits behind the frame's own edge lines and vanishes.
+  const lo = atsOf(visibleWalls([2, 2, 2], origin, dims), 0);
+  ok('the low wall is nudged up off its plane',
+     close(Math.min(...lo), -0.5 + WALL_NUDGE));
+  ok('and the high wall down off its own',
+     close(Math.max(...lo), 3.5 - WALL_NUDGE));
+  ok('the nudge is small enough not to read as an inset', WALL_NUDGE < 0.01);
+}
+{
+  // A square on the wall x = 5, centred under a cell at (1, 2, 3).
+  const q = wallSquare([1, 2, 3], 0, 5, 0.5);
+  eq('a square is two triangles', q.length, 6);
+  ok('every corner lies ON the wall', q.every((v) => v[0] === 5));
+  // It is the cell FLATTENED, so its other two coordinates are the cell's,
+  // spread half a width either side. A square that kept the cell's x would be
+  // floating in the room rather than lying on the wall.
+  ok('and spans the cell in the wall’s own two axes',
+     Math.min(...q.map((v) => v[1])) === 1.5 &&
+     Math.max(...q.map((v) => v[1])) === 2.5 &&
+     Math.min(...q.map((v) => v[2])) === 2.5 &&
+     Math.max(...q.map((v) => v[2])) === 3.5);
+
+  // The same cell on a y wall drops its y instead. Each wall answers a
+  // different one of the three questions, which is the whole point of casting
+  // onto more than one.
+  const qy = wallSquare([1, 2, 3], 1, -0.5, 0.5);
+  ok('a wall on another axis flattens that axis instead',
+     qy.every((v) => v[1] === -0.5));
+  ok('and carries the cell’s x across',
+     Math.min(...qy.map((v) => v[0])) === 0.5);
+}
+{
+  // The whole cursor: one flat buffer, three squares from a corner view.
+  const marks = cellMarks([1, 2, 3], [-6, -6, -6], [0, 0, 0], [4, 4, 4], 0.42);
+  eq('a corner view gives three squares of six points', marks.length, 3 * 6 * 3);
+  ok('as flat triples ready for a position buffer',
+     marks.every((n) => typeof n === 'number' && Number.isFinite(n)));
+
+  // Move the eye and the buffer changes size, because the number of visible
+  // walls did. This is what the render loop watches for.
+  eq('from inside there are six squares',
+     cellMarks([1, 2, 3], [2, 2, 2], [0, 0, 0], [4, 4, 4], 0.42).length,
+     6 * 6 * 3);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

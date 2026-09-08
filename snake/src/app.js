@@ -15,18 +15,19 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { Snake, CAUSE } from './snake.js';
 import { Orbit, bindOrbit } from '../../shared/orbit.js';
+import { Sky } from '../../shared/sky.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { rockAt } from '../../shared/rock.js';
 import { Pad, dirVec } from '../../shared/pad.js';
 import { SliceMap } from '../../shared/slicemap.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { haloMaterial, fatten, overshoot, shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
-import { Arrows } from '../../shared/warrow.js';
+import { Arrows, sizeFor } from '../../shared/warrow.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { Tutorial, tutorialSeen } from './tutorial.js';
 import { tutorialReturnTo } from '../../shared/tutorial-entry.js';
 import { WARD, VERBS, VERBS_BY_DIR, INTO, DIED_PLAINLY, TUTORIAL, PANELS,
-         HUD, GAME_OVER } from './copy.js';
+         AXIS_NAME, HUD, GAME_OVER } from './copy.js';
 import { addLights, sliceFrame, blocker, visibleWalls, wallSetKey, wallBar,
          wallDot, wallRoundedRect, roundedBox, projectionMaterial, setGeometry,
          blinkPhase, pulseAt, COLORS }
@@ -101,6 +102,9 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
+  // And stars behind it. The flat background stays as the ground they are drawn
+  // on -- a star is added light, so it needs something to be added to.
+  new Sky(scene);
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, FAR_PLANE);
   addLights(scene);
 
@@ -601,7 +605,13 @@ function redraw() {
   parts.dynamic = [];
   // The arrows marking steps that leave the room. Rebuilt with everything else,
   // but turned to face the camera every frame, so the set outlives the rebuild.
-  if (!arrows) arrows = new Arrows(parts.group);
+  // Sized for THIS game's framing. Snake's camera rests further back than the
+  // maze's -- 4.2 board-widths against 2.4 -- and through a narrower lens, so a
+  // maze-sized arrow comes out about two thirds the size here. sizeFor() puts
+  // the two back on the same footing. See shared/warrow.js.
+  if (!arrows) {
+    arrows = new Arrows(parts.group, { scale: sizeFor(4.2 * ZOOM_IN, 45) });
+  }
   arrows.clear();
 
   const body = game.body;
@@ -826,6 +836,8 @@ function aimAtFocus() {
 
 function doMove(axis, sign) {
   if (game.over) return;
+  // A tutorial card holding the board stops it being steered underneath.
+  if (tutorial && tutorial.frozen) return;
   const dir = dirVec(axis, sign, game.D);
   const before = wOf(game.head);
   const plan = game.move(dir);
@@ -844,9 +856,14 @@ function doMove(axis, sign) {
 
   // During a lesson the apple is the goal and death is a retry, so the
   // tutorial takes both rather than the ordinary game-over card appearing.
+  //
+  // The death sentence is worked out here and handed over, because only the
+  // game knows what hit what. The tutorial's card then reads exactly like the
+  // real one -- which is the point: a lesson that reported deaths differently
+  // would be teaching a game the player is not about to play.
   if (tutorial && tutorial.active) {
     if (plan.eats) tutorial.solved();
-    else if (game.over) setTimeout(() => tutorial.failed(), 700);
+    else if (game.over) tutorial.failed(deathSentence());
     return;
   }
 
@@ -913,7 +930,7 @@ function drawSlice() {
   const h = game.head;
   const wyFoot = el('mapWYFoot');
   if (wyFoot) {
-    wyFoot.innerHTML = has4D() ? PANELS.pair('x', h[0], 'z', h[2]) : '';
+    wyFoot.innerHTML = has4D() ? PANELS.pair(AXIS_NAME[0], h[0], AXIS_NAME[2], h[2]) : '';
   }
   const xzFoot = el('mapXZFoot');
   if (xzFoot) {
@@ -924,9 +941,9 @@ function drawSlice() {
     // has no y worth naming -- its single layer is not a place the player can
     // be -- so it says nothing.
     const flatBoard = game.dims.length > 1 && game.dims[1] === 1;
-    if (has4D()) xzFoot.innerHTML = PANELS.pair('w', wOf(h), 'y', h[1]);
+    if (has4D()) xzFoot.innerHTML = PANELS.pair(AXIS_NAME[3], wOf(h), AXIS_NAME[1], h[1]);
     else if (flatBoard) xzFoot.textContent = '';
-    else xzFoot.innerHTML = PANELS.heldFixed('y', h[1]);
+    else xzFoot.innerHTML = PANELS.heldFixed(AXIS_NAME[1], h[1]);
   }
 }
 
@@ -967,6 +984,12 @@ function bindInput() {
     // away for nothing. Restarting now lives in the pause menu, where it takes
     // a deliberate Escape and a click, and where it can be reconsidered.
     if (ev.key === ' ' || ev.code === 'Space') {
+      // Not while a lesson is up. The tutorial puts its own card over a death
+      // and takes Space itself, so letting this fire too would restart the
+      // board out from under that card -- the retry would happen twice, once
+      // invisibly, and the card would be left standing over a board that had
+      // already moved on.
+      if (tutorial && tutorial.active) return;
       ev.preventDefault();
       if (game.over) restartRun();
     }
@@ -999,6 +1022,8 @@ function bindInput() {
     // The last card says "Play" normally, but "Back to Unknot" is a promise
     // about where the button goes, so it says so.
     finishLabel: returnTo ? TUTORIAL.finishAndReturn : TUTORIAL.finish,
+    // The same gate the pad uses: while the menu is up, keys belong to it.
+    gate: () => !(pause && pause.open),
   });
   // New visitors get it unasked -- including anyone redirected here by another
   // game, which is what the return address means.

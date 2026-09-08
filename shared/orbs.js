@@ -301,7 +301,15 @@ export class Orbs {
     // these distances, and a plain mirror then throws the reflection into the
     // sky.
     const rise = Math.abs(CAMV.y - OFFSET.y);
-    WORLD.set(CAMV.x, OFFSET.y - rise, OFFSET.z).unproject(cam);
+    // Dropped by a fraction of the orb's own screen height on top of the
+    // mirror. The mirror itself is right -- centre reflects to centre -- and
+    // yet every echo read a little high, which is what a mirror in a SPRITE
+    // gets you: the disc is drawn centred in a square texture whose bright
+    // part stops short of the edge, so the mark the eye reads sits above the
+    // point being placed. Measured against the orb it belongs to rather than
+    // fixed, so the correction holds at every distance and zoom.
+    const sink = rise * 2 * ECHO_SINK;
+    WORLD.set(CAMV.x, OFFSET.y - rise - sink, OFFSET.z).unproject(cam);
     it.echo.position.copy(WORLD).sub(this.offset);
 
     // Matched to the orb's size on screen: a sprite shrinks with distance, so
@@ -354,5 +362,10 @@ const SIZE = 0.019;
 // How much of an orb the table gives back. Low: a bright pool reads as a lamp
 // under the table rather than a sheen on it.
 const ECHO = 0.275;
+
+// How far the echo is sunk below its mirrored place, as a fraction of the
+// orb's own height above the table on screen. Small: the mirror is correct and
+// this only answers for where the sprite's disc sits inside its texture.
+const ECHO_SINK = 0.055;
 
 export { sliceRadius } from './orbshape.js';

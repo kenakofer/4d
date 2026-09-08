@@ -28,19 +28,21 @@ import { jointRadius, needsJoint, junctionKind, axesAt, straightRuns }
   from '../../shared/junction.js';
 import { Ring, Slide } from '../../shared/ring.js';
 import { Orbit, bindOrbit } from '../../shared/orbit.js';
-import { rockAt } from '../../shared/rock.js';
+import { rockAt, pulseAt, blinkPhase } from '../../shared/rock.js';
 import { Props, FAR_PLANE, LOOK_DOWN_DEG } from '../../shared/props.js';
 import { KEYMAP, dirVec } from '../../shared/pad.js';
 import { SlicePanels } from '../../shared/slicepanels.js';
 import { Gamepads } from '../../shared/gamepad.js';
 import { PauseMenu } from '../../shared/pause.js';
 import { addLights, sliceFrame, blocker, COLORS } from '../../shared/scene.js';
+import { Sky } from '../../shared/sky.js';
 import { haloMaterial, jointHaloMaterial, fatten, fattenJoint, overshoot,
   shellGeometry, HALO_ORDER, ROPE_ORDER } from '../../shared/halo.js';
 import { armMask, sleeveFraction } from '../../shared/haloshape.js';
-import { Arrows } from '../../shared/warrow.js';
+import { Arrows, sizeFor } from '../../shared/warrow.js';
+import { cellMarks } from '../../shared/wallmark.js';
 import { key, step } from '../../shared/grid.js';
-import { HUD, FOURTH, WON, PANELS, AXIS_NAME } from './copy.js';
+import { HUD, FOURTH, WON, PANELS } from './copy.js';
 
 let scene, camera, renderer, orbit, props, panels, pause, gamepads;
 let maze = null, dims = DEFAULTS.dims.slice();
@@ -56,6 +58,11 @@ const viewAxes = [0, 1, 2, 3];
 
 const slide = new Slide();
 let gridGroup, frames, ropeGroup;
+// The cursor's two pieces: the cage around the player's cell, and its shadows
+// on the walls. Built once and moved, rather than rebuilt with the rope --
+// the cage never changes shape, and the marks change only when the camera
+// crosses a wall's plane.
+let cageMesh = null, markMesh = null;
 
 // The rope's colour ramp. Unknot runs its ramp end to end along the strand,
 // which it can because a strand has two ends. A maze has none, so the ramp runs
@@ -66,7 +73,62 @@ const NEAR = new THREE.Color(0x37d6a0);   // close to the exit
 const FAR = new THREE.Color(0xa06bff);    // far from it
 const JUNCTION = new THREE.Color(0xffd166);
 
+// The two cells that are not like the others: where you started and where you
+// are trying to get to.
+//
+// Unknot marks the two ends of its rope, and for the same reason -- a strand
+// with no ends marked is a strand you cannot orient yourself along. A maze
+// needs it more, not less: the rope forks, so there is nothing else on screen
+// that says which of a hundred identical junctions is the one that matters.
+//
+// They are told apart by COLOUR rather than by shape, because the shape is
+// already saying something else: a ball's size is its joint radius, which is
+// how many passages meet there, and inflating the exit would claim a junction
+// that may not be one.
+//
+// The exit also PULSES. A still mark of any colour is one more coloured ball in
+// a scene made of coloured balls, and the exit is the single thing the player
+// is looking for -- movement is what the eye finds across a busy room, and
+// nothing else in the maze moves.
+// Orange rather than the yellow this used to be. That yellow was JUNCTION's,
+// exactly -- so the cell the player was standing on was drawn in the colour
+// meaning "a place where you must choose", and on a board with a hundred
+// junctions the one mark that should have been findable at a glance was
+// camouflaged among them. Orange is the nearest colour that is still plainly
+// not yellow at a distance and still plainly not the rope's green-to-purple.
+const START = new THREE.Color(0xff8c1a);   // where you stand
+const EXIT = new THREE.Color(0x35ff8a);    // where you are going
+
 const TUBE = 0.115;
+
+// The cursor: a cage around the cell the player stands on, and that cell's
+// shadow on the walls of its frame.
+//
+// The ball alone was not enough, and could not be. A joint's colour is read
+// against four hundred other joints and its size means how many passages meet
+// there, so neither is free to shout -- and the one thing a maze-walker needs
+// continuously, more than where the exit is, is where THEY are. Losing your own
+// position in a tangle of identical rope is what makes a maze unplayable, and
+// it is the failure a still coloured ball is worst at preventing.
+//
+// So the cursor is given the two things nothing else in the scene has. It is
+// the only cage -- a box among tubes and balls, which reads instantly because
+// it is not the same KIND of object as its surroundings. And it blinks, on
+// unknot's caret clock, because the eye finds movement across a busy room
+// before it finds colour.
+//
+// The wall marks are the other half, and they answer a different question. A
+// cage says which cell; the marks say which x, which y, which z -- because a
+// point in perspective is consistent with a whole line of positions, and the
+// player has to know where they stand along each axis to make sense of the pad.
+// Exactly unknot's reasoning, and now exactly its code: see shared/wallmark.js.
+const CURSOR_CAGE = 0.46;    // half-width of the cage, just inside the cell
+const CURSOR_MARK = 0.42;    // half-width of a wall square, as unknot's
+// How far each surface swings when the blink is dim. The cage is a solid line
+// and the wall mark a faint wash, so the same fraction is a much smaller change
+// on the mark -- it gets the deeper swing to blink as visibly as the cage.
+const BLINK_CAGE = 0.45;
+const BLINK_MARK = 0.5;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -78,7 +140,13 @@ function writeLabels() {
   document.getElementById('reset').textContent = WON.playAgain;
   document.getElementById('legendJunction').textContent = FOURTH.legendJunction;
   document.getElementById('legendW').textContent = FOURTH.legend;
+  document.getElementById('legendStart').textContent = FOURTH.legendStart;
+  document.getElementById('legendExit').textContent = FOURTH.legendExit;
+  // The swatches take their colour from the constants the scene is drawn with,
+  // so a colour changed there cannot leave the key behind describing the old one.
   document.getElementById('swJunction').style.background = '#' + JUNCTION.getHexString();
+  document.getElementById('swStart').style.background = '#' + START.getHexString();
+  document.getElementById('swExit').style.background = '#' + EXIT.getHexString();
 }
 
 function ring() {
@@ -130,6 +198,7 @@ function newMaze() {
   slide.shown = slide.focus;
   buildFrames();
   rebuildRope();
+  updateCursor(true);
   updateHud();
   // The pad caches which directions are open and only re-reads them when told.
   // A new maze changes every one of them, so without this the buttons keep
@@ -145,6 +214,9 @@ function init() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.bg);
+  // And stars behind it. The flat background stays as the ground they are drawn
+  // on -- a star is added light, so it needs something to be added to.
+  new Sky(scene);
   camera = new THREE.PerspectiveCamera(52, 1, 0.1, FAR_PLANE);
   addLights(scene);
 
@@ -160,6 +232,7 @@ function init() {
   props = new Props({ dims3: [X, Y, Z], ring: r, depth: r.depth, orbs: true });
   gridGroup.add(props.group);
 
+  buildCursor();
   newMaze();
 
   const c = [X / 2, Y / 2, Z / 2];
@@ -175,6 +248,9 @@ function init() {
   };
   camera.position.set(...orbit.position());
   camera.lookAt(...orbit.target);
+  // The cursor's wall marks depend on where the eye is, so they cannot be laid
+  // out until the camera has been put somewhere.
+  updateCursor(true);
   // Drag to turn, wheel to zoom, two fingers to pinch -- the same as every
   // other game, from the same place, so it cannot drift apart from them again.
   bindOrbit(canvas, () => orbit);
@@ -192,8 +268,6 @@ function init() {
         foot: document.getElementById('mapXZFoot') },
     ],
     dims,
-    axisName: (ax) => AXIS_NAME[ax],
-    copy: PANELS,
     onPush: (axis, sign) => tryMove(axis, sign),
     // Grey out a direction with no passage behind it. The pad is the one place
     // that can say "there is no way that way" before the player spends a press
@@ -209,6 +283,11 @@ function init() {
     isPresent: (axis) => axis < dims.length && dims[axis] > 1,
   });
   panels.configure((m) => {
+    // The player stands ON a passage rather than being one, so the cell they
+    // are in is ringed and left showing. Filling it -- which is right for the
+    // snake, whose head IS a cell -- would paint over the passage colour at the
+    // one place the player is reading it from.
+    m.markerStyle = 'ring';
     // The maze is drawn as a NETWORK, not as filled cells. A passage is a
     // strand running from one cell into the next, exactly as the rope in the
     // room is -- and where there is no passage the cells stay apart, which is
@@ -298,6 +377,10 @@ function buildFrames() {
 let segMesh = null, jointMesh = null;
 let segHalo = null, jointHalo = null;
 let arrows = null;
+// Which joint instance is the exit's, so the loop can pulse that one ball
+// without touching the other four hundred. Null when there is no rope, or when
+// the player is standing on the exit and it has stopped being a destination.
+let exitInstance = null;
 
 function rebuildRope() {
   for (const m of [segMesh, jointMesh, segHalo, jointHalo]) {
@@ -331,8 +414,16 @@ function rebuildRope() {
   const hasJoint = new Set();
   for (const k of maze.cells) {
     const axes = axesAt(maze.neighbours(k), k, axisOf);
-    if (!needsJoint(maze.degree(k), axes)) continue;
-    jointed.push({ k, axes, kind: junctionKind(maze.degree(k), axes) });
+    // The start and the exit always get one, whatever the geometry wants.
+    //
+    // A cell the rope runs straight through is normally left bare -- a ball
+    // there is the lump that makes rope look beaded -- but these two are not
+    // being marked because the rope bends at them. They are being marked
+    // because of what they ARE, and a corridor is exactly where the player
+    // most needs to see that the way out is here rather than at the next bend.
+    const special = k === at || k === exit;
+    if (!special && !needsJoint(maze.degree(k), axes)) continue;
+    jointed.push({ k, axes, kind: junctionKind(maze.degree(k), axes), special });
     hasJoint.add(k);
   }
 
@@ -422,19 +513,34 @@ function rebuildRope() {
   // the width they were, which makes its cone narrower than a corner's.
   const masks = new Float32Array(jointed.length);
   const fracs = new Float32Array(jointed.length);
-  jointed.forEach(({ k, axes, kind }, i) => {
+  // Where the pulsing exit's ball lives in the instance buffers, so the frame
+  // loop can breathe it without rebuilding the rope. Null when the exit is not
+  // currently drawn.
+  exitInstance = null;
+  jointed.forEach(({ k, axes, kind, special }, i) => {
     const r = jointRadius(TUBE, axes);
     // A junction is marked, because a place where the player has to choose is
     // the one thing in a maze worth seeing from across the room. But only just
     // marked: at 1.9x the spheres were bigger than the passages between them
     // and the maze read as a heap of beads with rope incidental. The colour is
     // doing the work, so the size only has to be enough to notice.
-    const scale = kind === 'junction' ? r * 1.25 : r;
+    //
+    // The start and exit are lifted a little further, for the same reason and
+    // to the same small degree: enough to find, not enough to turn the two of
+    // them into landmarks the rope hangs off.
+    const scale = special ? r * 1.45 : (kind === 'junction' ? r * 1.25 : r);
     const pos = new THREE.Vector3(...proj(k));
     m4.compose(pos, new THREE.Quaternion(),
                new THREE.Vector3(scale, scale, scale));
     jointMesh.setMatrixAt(i, m4);
-    jointMesh.setColorAt(i, kind === 'junction' ? JUNCTION.clone() : colourAt(k));
+    // Start and exit outrank a junction: either may well BE one, and which
+    // junction it is matters more than that it is one.
+    let jc;
+    if (k === at) jc = START.clone();
+    else if (k === exit) { jc = EXIT.clone(); exitInstance = i; }
+    else if (kind === 'junction') jc = JUNCTION.clone();
+    else jc = colourAt(k);
+    jointMesh.setColorAt(i, jc);
     const hs = fattenJoint(scale) * scale;
     m4.compose(pos, new THREE.Quaternion(), new THREE.Vector3(hs, hs, hs));
     jointHalo.setMatrixAt(i, m4);
@@ -468,13 +574,137 @@ function rebuildRope() {
   // They take the cell's own distance colour rather than a colour of their own,
   // so a way out is read exactly like every other passage: how far it leaves
   // you from the exit. The arrowhead is what says it leaves the slice.
-  if (!arrows) arrows = new Arrows(ropeGroup);
+  // The maze is what the arrow size was tuned against -- 2.4 board-widths at 52
+  // degrees -- so this comes out at 1. Said out loud rather than left to the
+  // default, so that changing this game's camera is visibly a thing that
+  // changes the arrows. See shared/warrow.js.
+  if (!arrows) arrows = new Arrows(ropeGroup, { scale: sizeFor(2.4, 52) });
   arrows.clear();
   for (const [a, b] of hops) {
     const va = new THREE.Vector3(...proj(a)), vb = new THREE.Vector3(...proj(b));
     arrows.add(va, vb, colourAt(a));
     arrows.add(vb, va, colourAt(b));
   }
+}
+
+// ---------------------------------------------------------------------------
+// The cursor
+// ---------------------------------------------------------------------------
+
+// Build the cage and the mesh its wall marks will be poured into.
+//
+// Once, at startup. The cage is the same box wherever the player goes, so it is
+// moved rather than remade, and the marks are one mesh whose geometry is
+// swapped -- both so that stepping through a maze costs no allocation on the
+// hot path.
+function buildCursor() {
+  // A wireframe box rather than a solid one. Solid would hide the joint it
+  // surrounds, and the joint is carrying the distance colour the player is
+  // reading -- a cursor that blanks out what it points at has pointed at
+  // nothing. Edges only, so the cell shows through its own marker.
+  const box = new THREE.BoxGeometry(CURSOR_CAGE * 2, CURSOR_CAGE * 2,
+                                    CURSOR_CAGE * 2);
+  cageMesh = new THREE.LineSegments(
+    new THREE.EdgesGeometry(box),
+    // Basic, not Lambert: this is a marker, not a thing in the room, and it
+    // must not go dim when the player walks into a corner the lights miss.
+    // depthTest off so the cage shows through the rope it is standing among --
+    // being occluded by the passage you are on is exactly the failure the
+    // cursor exists to prevent.
+    new THREE.LineBasicMaterial({
+      color: START, transparent: true, depthTest: false, depthWrite: false }));
+  box.dispose();
+  cageMesh.renderOrder = HALO_ORDER + 1;
+  cageMesh.material.userData.baseOpacity = 1;
+  gridGroup.add(cageMesh);
+
+  // The marks. One mesh, geometry replaced when the visible walls change.
+  //
+  // The stencil is unknot's, and for its reason: the squares of one cursor
+  // never overlap each other, but the material is translucent and drawn with
+  // depth writing off, so anything that DID overlap would blend twice and show
+  // as a brighter patch. Claiming each pixel the first time keeps the wash even
+  // whatever else lands on the wall.
+  markMesh = new THREE.Mesh(
+    new THREE.BufferGeometry(),
+    new THREE.MeshBasicMaterial({
+      color: START,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      stencilWrite: true,
+      stencilRef: 1,
+      stencilFunc: THREE.NotEqualStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp,
+    }));
+  markMesh.renderOrder = 0;
+  markMesh.material.userData.baseOpacity = markMesh.material.opacity;
+  gridGroup.add(markMesh);
+}
+
+// Which walls are showing, as a short string, so the marks are rebuilt when
+// that set changes and not on the frames in between.
+//
+// The camera rocks every frame but crosses a wall's plane only now and then.
+// Rebuilding a buffer sixty times a second to produce the same six squares is
+// the kind of waste that does not show up until it is next to four hundred
+// instanced joints, which is where it is.
+let cursorKey = '';
+
+// Move the cursor to where the player now stands.
+//
+// `force` rebuilds the marks even if nothing seems to have changed -- the
+// frames slide around the ring as w moves, so the same cell can need its marks
+// redrawn without the camera or the cell having moved at all.
+function updateCursor(force = false) {
+  if (!cageMesh || !at || !orbit) return;
+  // Won: the player is standing on the exit, which is pulsing to say so. Two
+  // markers on one cell is one of them lying about where the other thing is,
+  // so the cursor gets out of the way and lets the finish be the finish.
+  cageMesh.visible = !won;
+  markMesh.visible = !won;
+  if (won) return;
+
+  const p = proj(at);
+  cageMesh.position.set(p[0], p[1], p[2]);
+
+  // The marks go on the walls of the frame the player is IN, not of the ring as
+  // a whole: each slice is its own room, and a shadow cast onto some other
+  // slice's wall would be pointing at a place the player is not.
+  const w = at.split(',').map(Number)[viewAxes[3]];
+  const off = slotOffset(w);
+  const dims3 = [dims[viewAxes[0]], dims[viewAxes[1]], dims[viewAxes[2]]];
+  const eye = orbit.position();
+  const sig = `${at}|${eye.map((v, d) =>
+    (v > off[d] - 0.5 ? '1' : '0') + (v < off[d] + dims3[d] - 0.5 ? '1' : '0')
+  ).join('')}`;
+  if (!force && sig === cursorKey) return;
+  cursorKey = sig;
+
+  const verts = cellMarks(p, eye, off, dims3, CURSOR_MARK);
+  markMesh.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.computeBoundingSphere();
+  markMesh.geometry = g;
+}
+
+// Blink the cursor, on the same clock as unknot's caret.
+//
+// Both pieces ride on material opacity, which they can because each is its own
+// mesh -- unlike the exit's ball, which is one instance among four hundred and
+// has to blink on colour instead.
+function blinkCursor(ms) {
+  if (!cageMesh) return;
+  // Won: the cursor is hidden, so leave both materials at rest rather than
+  // frozen wherever the last blink happened to stop. Otherwise the next maze
+  // opens with a cage stuck at half strength until the clock next ticks over.
+  const phase = won ? 0 : blinkPhase(ms);
+  cageMesh.material.opacity =
+    cageMesh.material.userData.baseOpacity * (1 - BLINK_CAGE * phase);
+  markMesh.material.opacity =
+    markMesh.material.userData.baseOpacity * (1 - BLINK_MARK * phase);
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +725,7 @@ function tryMove(axis, sign) {
   slide.focus = np[viewAxes[3]];
   if (at === exit) won = true;
   rebuildRope();
+  updateCursor(true);
   updateHud();
   // Which directions are open changed with the step, and the pad only
   // re-reads `isLive` when it is told to.
@@ -515,8 +746,7 @@ function updateHud() {
     status.innerHTML = `<b>${WON.heading}</b> &mdash; ` + WON.summary(steps, best);
     return;
   }
-  const left = toExit.has(at) ? toExit.get(at) : 0;
-  status.innerHTML = PANELS.pair(HUD.steps, steps, HUD.toGo, left);
+  status.innerHTML = PANELS.single(HUD.steps, steps);
 }
 
 // ---------------------------------------------------------------------------
@@ -532,6 +762,9 @@ function frame(t) {
   if (slide.step(dt)) {
     buildFrames();
     rebuildRope();
+    // The frames have moved around the ring, so the walls the marks are painted
+    // on are somewhere new even though the player has not taken a step.
+    updateCursor(true);
   }
   // The scenery follows the CAMERA's lateral angle, not the player's w. The
   // slices are what move with w; the table and the sky are the room they stand
@@ -549,8 +782,29 @@ function frame(t) {
   }
   if (panels && maze) panels.draw(at.split(',').map(Number));
   if (arrows) arrows.face(camera.position);
+  // Cheap unless the camera has crossed a wall's plane, which is rare -- see
+  // updateCursor.
+  updateCursor();
+  blinkCursor(t - t0);
+  pulseExit(t - t0);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
+}
+
+// Breathe the exit's ball.
+//
+// The colour is scaled rather than the geometry: a ball that grew and shrank
+// would fight the one thing joint SIZE already means here -- how many passages
+// meet at a cell -- and a reader who had learned that would be told a lie twice
+// a second. Brightness carries no such meaning, so it is free to carry this.
+//
+// Only the one instance is rewritten, and only its colour buffer is flagged.
+// The maze has some four hundred joints and this runs every frame.
+function pulseExit(ms) {
+  if (!jointMesh || exitInstance === null || won) return;
+  const f = 0.55 + 0.45 * pulseAt(ms);
+  jointMesh.setColorAt(exitInstance, EXIT.clone().multiplyScalar(f));
+  if (jointMesh.instanceColor) jointMesh.instanceColor.needsUpdate = true;
 }
 
 function resize() {

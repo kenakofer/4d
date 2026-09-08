@@ -18,6 +18,7 @@
 
 import { SliceMap } from './slicemap.js';
 import { Pad } from './pad.js';
+import { AXIS_NAME, PANELS } from './copy.js';
 
 // Which plane each column shows, and which axes it therefore holds still.
 //
@@ -32,10 +33,14 @@ export const COLUMNS = [
 export class SlicePanels {
   // `hosts` names the elements to fill: for each column, the cluster div, the
   // svg and the footer. `axisName` turns an axis index into the letter a footer
-  // calls it, and `copy` supplies the two sentences a footer can be -- both
-  // come from the game, because the words are the game's to review.
-  constructor({ columns, dims, wrap = [], axisName, copy, onPush,
-                isLive, isPresent, teachOnly = true }) {
+  // calls it, and `copy` supplies the sentences a footer can be.
+  //
+  // Both default to the shared wording, which is what every game here wants: a
+  // footer says the same thing in the Maze as in Snake, and passing the same
+  // two values in from each game was three chances for them to diverge. A game
+  // that genuinely needs its own can still say so.
+  constructor({ columns, dims, wrap = [], axisName = (ax) => AXIS_NAME[ax],
+                copy = PANELS, onPush, isLive, isPresent, teachOnly = true }) {
     this.columns = columns;
     this.dims = dims;
     this.axisName = axisName;
