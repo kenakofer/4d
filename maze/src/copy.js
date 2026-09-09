@@ -32,8 +32,8 @@ export const WON = {
   // Composed rather than glued together at the call site, so the whole sentence
   // is readable here. See AGENTS.md.
   summary: (took, best) => took === best
-    ? `${took} steps, which is the best there was.`
-    : `${took} steps, where ${best} would have done.`,
+    ? ` (perfection!)` //kenan approved
+    : `${took} steps, (${best} would be perfect).`, //kenan approved
   playAgainKey: 'Space', //kenan approved
   playAgain: 'New maze', //kenan approved
 };

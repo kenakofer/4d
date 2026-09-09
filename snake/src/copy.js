@@ -125,8 +125,8 @@ export const TUTORIAL = {
     // The button that puts the same lesson back. The lesson is unchanged, which
     // is the point: the board that just beat you is the board you get to try
     // again, rather than a fresh one that might be easier.
-    retry: 'Try again',
-    retryKey: 'Space',
+    retry: 'Try again', //kenan approved
+    retryKey: 'Space', //kenan approved
   },
 };
 

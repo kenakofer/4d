@@ -26,24 +26,23 @@ export const HUD = {
 
 export const LEVEL_TEXT = {
   bump: {
-    name: 'First bump',
-    blurb: 'One detour. Flatten it.',
+    name: 'Little bump', //kenan approved
+    blurb: 'Press right to smooth the rope straight', //kenan approved
   },
   bend: {
-    name: 'Long bend',
-    blurb: 'Grab the corner and walk it down the rope.',
+    name: 'Long bend', //kenan approved
+    blurb: 'Move to the corner and smooth it out', //kenan approved
   },
   staircase: {
-    name: 'Staircase',
-    blurb: 'Slack in three directions at once.',
+    name: 'Staircase', //kenan approved
+    blurb: 'Untangle in 3d now', //kenan approved
   },
   tangle: {
-    name: 'Tangle',
-    blurb: 'Loose, but not knotted. It all comes out.',
+    name: 'Tangle', //kenan approved
+    blurb: 'Still no 4d necessary', //kenan approved
   },
   trefoil: {
-    name: 'Trefoil',
-    blurb: 'A real knot. Stuck at 27 steps with three directions -- ' +
-           'use the fourth and it comes undone.',
+    name: 'Trefoil', //kenan approved
+    blurb: 'This one\'s a real knot in 3d. Use the fourth to "cheat".', //kenan approved
   },
 };
