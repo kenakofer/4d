@@ -40,17 +40,20 @@ never move or delete one while editing the line it sits on — rewriting an
 approved sentence silently re-drafts it under a stamp that no longer applies. If
 an approved line has to change, change it and drop the marker.
 
-Two exceptions to the copy rule, both narrow:
+There is one exception, and it is narrow:
 
-- **Level names and blurbs** stay in `unknot/src/levels.js`, beside the
-  paths they describe. A level is a name, a sentence and a shape together, and
-  splitting them would mean editing two files to add one level. This is the one
-  place outside a copy file where player-visible prose lives, so it is on the
-  list of places to review -- treat the `name` and `blurb` fields there exactly
-  as if they were in a copy file.
 - **Strings the player never sees** — key names (`'Escape'`, `' '`), element
   ids, CSS classes, storage keys — are code that happens to be a string. They
   stay where they are used.
+
+Data files are not an exception either. Unknot's levels used to keep their
+names and blurbs beside the paths they describe, on the grounds that a level is
+a name, a sentence and a shape together; that bought one less file to edit and
+cost the review its short list of places to look, which was the wrong trade.
+The shapes in `levels.js` now carry an `id` and the prose lives in `copy.js`
+under it, joined at export. Adding a level means an entry in each file, and the
+join throws if either is missing rather than rendering `undefined` at the
+player.
 
 Composed sentences belong in copy too, as functions rather than fragments:
 

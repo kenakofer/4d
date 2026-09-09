@@ -144,9 +144,9 @@ every game shares, `shared/index-copy.js` for the landing page, and
 point is review: nothing an AI drafted ships to a player unread, and that is
 only possible while there is a short list of places to look.
 
-Unknot's level names and blurbs are the one exception, staying in `levels.js`
-beside the paths they describe -- a level is a name, a sentence and a shape
-together. `AGENTS.md` has the rule in full.
+That holds for data files too: a level's shape lives in `levels.js` and the
+name and blurb the player reads live in `copy.js`, joined by an id when the
+levels are built. `AGENTS.md` has the rule in full.
 
 ## Layout
 

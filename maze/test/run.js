@@ -216,7 +216,7 @@ console.log('maze: structure');
 
 // --- dimension-agnostic ----------------------------------------------------
 {
-  // The rule from CLAUDE.md, as a test: nothing in the generator may assume
+  // The rule from AGENTS.md, as a test: nothing in the generator may assume
   // there are four axes. These are the same call in 2D, 3D and 5D.
   for (const dims of [[8, 8], [6, 6, 6], [4, 4, 4, 4, 4]]) {
     const { maze } = generate({ seed: 3, dims, minFill: 0.1 });

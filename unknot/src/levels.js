@@ -1,11 +1,11 @@
+import { LEVEL_TEXT } from './copy.js';
+
 // Level definitions. Each level is a starting path in a grid.
 //
-// The `name` and `blurb` fields are PLAYER-VISIBLE PROSE, and this is the one
-// place outside a copy file where any lives. They are here because a level is a
-// name, a sentence and a shape together, and splitting them would mean editing
-// two files to add one level -- but they carry the same rule: anything an AI
-// writes in them is a draft, to be read and approved before it ships. See
-// CLAUDE.md.
+// The SHAPES live here; the name and blurb the player reads live in copy.js,
+// under the `id` each level carries. They are joined below, so a level is still
+// one object with a `name` and a `blurb` on it -- adding a level means an entry
+// in each file, and the export checks that neither was forgotten.
 //
 // Every level is played in four dimensions -- a 3D path is lifted to w = 0 as it loads -- so
 // they are all solvable; `knotted` marks the ones whose 3D shadow is a real
@@ -15,16 +15,14 @@ const TREFOIL_3D = [[0,3,4],[1,3,4],[2,3,4],[3,3,4],[4,3,4],[5,3,4],[5,4,4],[6,4
 
 const LIFT_TREFOIL = TREFOIL_3D.map((p) => [...p, 0]);
 
-export const LEVELS = [
+const SHAPES = [
   {
-    name: 'First bump',
-    blurb: 'One detour. Flatten it.',
+    id: 'bump',
     dims: [8, 8, 8],
     path: [[1,1,1],[2,1,1],[2,2,1],[3,2,1],[4,2,1],[4,1,1],[5,1,1],[6,1,1]],
   },
   {
-    name: 'Long bend',
-    blurb: 'Grab the corner and walk it down the rope.',
+    id: 'bend',
     dims: [10, 10, 10],
     // A long straight run with a detour parked in the middle of it. Walking
     // the bend along the rope brings the slack to where it can be pulled in.
@@ -32,24 +30,20 @@ export const LEVELS = [
            [6,1,1],[7,1,1],[8,1,1]],
   },
   {
-    name: 'Staircase',
-    blurb: 'Slack in three directions at once.',
+    id: 'staircase',
     dims: [8, 8, 8],
     path: [[1,1,1],[1,1,2],[1,2,2],[2,2,2],[2,2,3],[2,3,3],[3,3,3],
            [3,3,2],[3,2,2],[3,2,1],[4,2,1],[4,1,1],[5,1,1]],
   },
   {
-    name: 'Tangle',
-    blurb: 'Loose, but not knotted. It all comes out.',
+    id: 'tangle',
     dims: [8, 8, 8],
     path: [[1,3,3],[2,3,3],[2,4,3],[2,4,4],[3,4,4],[3,3,4],[4,3,4],[4,3,3],
            [4,2,3],[3,2,3],[3,2,4],[3,2,5],[4,2,5],[5,2,5],[5,3,5],[5,4,5],
            [5,4,4],[5,4,3],[5,5,3],[6,5,3]],
   },
   {
-    name: 'Trefoil',
-    blurb: 'A real knot. Stuck at 27 steps with three directions -- ' +
-           'use the fourth and it comes undone.',
+    id: 'trefoil',
     // Symmetric so the 4D view can be rotated between any pair of axes.
     dims: [10, 10, 10, 10],
     // Its 3D shadow is a genuine trefoil, which is why three directions are
@@ -60,3 +54,18 @@ export const LEVELS = [
     path: LIFT_TREFOIL,
   },
 ];
+
+// The shape and its words, joined into the one object the game and the tests
+// use. A level with no text (or text with no level) is a mistake that would
+// otherwise show up as `undefined` on the page, so it throws here instead.
+export const LEVELS = SHAPES.map((L) => {
+  const text = LEVEL_TEXT[L.id];
+  if (!text) throw new Error(`level '${L.id}' has no name or blurb in copy.js`);
+  return { ...L, ...text };
+});
+
+for (const id of Object.keys(LEVEL_TEXT)) {
+  if (!SHAPES.some((L) => L.id === id)) {
+    throw new Error(`copy.js describes a level '${id}' that does not exist`);
+  }
+}

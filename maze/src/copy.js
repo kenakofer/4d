@@ -30,7 +30,7 @@ export const WON = {
   // versus how little you needed to.
   yourSteps: 'You took', //kenan approved
   // Composed rather than glued together at the call site, so the whole sentence
-  // is readable here. See CLAUDE.md.
+  // is readable here. See AGENTS.md.
   summary: (took, best) => took === best
     ? `${took} steps, which is the best there was.`
     : `${took} steps, where ${best} would have done.`,
