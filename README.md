@@ -16,7 +16,7 @@ That transfer is the point of keeping them in one repository rather than four.
 | [4D Unknot](unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d/unknot/> |
 | [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side, the fourth included. | <https://kenan.schaefkofer.com/4d/snake/> |
 | [4D Tron](tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d/tron/> |
-| [4D Maze](maze/) | Find the way out. Only the passages are drawn, so a corridor that stops short is a way into the next slice. | <https://kenan.schaefkofer.com/4d/maze/> |
+| [4D Maze](maze/) | Find one correct path from start to finish in four dimensions. | <https://kenan.schaefkofer.com/4d/maze/> |
 
 Each game is served from its own directory, so the URL is just the game's name.
 The root is an index linking to them all.

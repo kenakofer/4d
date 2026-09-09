@@ -25,7 +25,7 @@ export const HUD = {
 // maze/index.html. The board stays visible behind it, so the route just walked
 // and the two goal boxes are still there to look at.
 export const WON = {
-  heading: 'Out',
+  heading: 'Out', //kenan approved
   // The stat that is worth knowing at the end: how much of the maze you walked
   // versus how little you needed to.
   yourSteps: 'You took', //kenan approved

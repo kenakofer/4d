@@ -49,14 +49,13 @@ export const INDEX = {
       dim: '4D', //kenan approved
       name: 'Tron', //kenan approved
       tag: '2 players', //kenan approved
-      text: 'Competitive 2 player classic in a fast-paced 4-dimensional head-to-head', //kenan approved
+      text: 'Competitive 2 player classic in a fast-paced 4-dimensional head-to-head.', //kenan approved
     },
     {
-      href: './maze/',
-      dim: '4D',
-      name: 'Maze',
-      text: 'Find the way out. Only the passages are drawn, so a corridor ' +
-            'that stops short is a way into the next slice.',
+      href: './maze/', //kenan approved
+      dim: '4D', //kenan approved
+      name: 'Maze', //kenan approved
+      text: 'Find one correct path from start to finish in four dimensions.', //kenan approved
     },
   ],
 
