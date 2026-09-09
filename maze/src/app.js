@@ -22,6 +22,7 @@
 //   - a junction is marked, because a place where you must choose is the only
 //     thing in a maze worth seeing from across the room.
 
+import { sendToTutorialIfNew, tutorialUrl } from '../../shared/tutorial-entry.js';
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 import { generate, distances, Maze, DEFAULTS } from './maze.js';
 import { jointRadius, needsJoint, junctionKind, axesAt, straightRuns }
@@ -308,7 +309,10 @@ function init() {
   // other game, from the same place, so it cannot drift apart from them again.
   bindOrbit(canvas, () => orbit);
 
-  pause = new PauseMenu({ onRestart: newMaze });
+  pause = new PauseMenu({
+    onRestart: newMaze,
+    onTutorial: () => { location.href = tutorialUrl(); },
+  });
   // The two slice panels and the split pad that goes with them, all shared
   // furniture. What stays here is only what the panels DRAW.
   panels = new SlicePanels({
@@ -988,4 +992,10 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 
-init();
+// A player who has never done the movement tutorial goes there first.
+//
+// It runs on Snake's board -- the fourth dimension has to be used to be
+// learned, and that is the simplest game to use it in -- and hands the player
+// back here when it ends. If it redirects, there is no point building a scene
+// nobody will see.
+if (!sendToTutorialIfNew()) init();

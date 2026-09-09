@@ -97,8 +97,8 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
-**The movement tutorial is shared.** A first-time visitor to Unknot, Snake or
-Tron is sent to it before that game loads, and returned afterwards. It teaches
+**The movement tutorial is shared.** A first-time visitor to any game is sent
+to it before that game loads, and returned afterwards. It teaches
 the controls and the ring of rooms -- the fourth dimension, which is the idea
 all these games are built on -- using Snake's board, because the fourth
 dimension has to be *used* to be learned and Snake is the simplest game to use
