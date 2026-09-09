@@ -1,9 +1,8 @@
 // Everything the player reads in 4D Maze.
 //
-// Prose, meant to be edited like a document. NOTHING HERE IS APPROVED: every
-// sentence below was drafted by an AI and is waiting to be read, rewritten or
-// thrown out by the author. The other games mark approved lines with a comment;
-// none of these carry it yet. See shared/copy.js for the rule in full.
+// Prose, meant to be edited like a document. Lines marked //kenan approved have
+// been read by the author; everything else is an AI draft still waiting to be
+// read, rewritten or thrown out. See shared/copy.js for the rule in full.
 
 export const HUD = {
   title: '4D Maze', //kenan approved
@@ -18,32 +17,6 @@ export const HUD = {
   // dial, and there is nothing left to work out.
   steps: 'Steps', //kenan approved
   padFoot: 'menu · drag to look', //kenan approved
-};
-
-// ---------------------------------------------------------------------------
-// The fourth direction.
-//
-// The one thing this game has to teach that the other two do not: a passage can
-// leave the slice you are looking at. These are the words for that.
-// ---------------------------------------------------------------------------
-
-export const FOURTH = {
-  // The label on such a passage in the legend beside the board.
-  legend: '',
-  // And the other mark worth explaining: the places where you have to choose.
-  legendJunction: '',
-  // The three cells that are not like the others: where the player is, where
-  // they came in, and where they are going.
-  //
-  // None of them is only a colour, so a swatch describes none of them fully.
-  // The player's cell wears a blinking wireframe cage and casts marks on the
-  // walls saying where it sits along each axis; the start is a still block of
-  // haze; the exit is the same block, breathing. The legend can show the
-  // colours and nothing else, so if any of that needs saying, here is where it
-  // gets said.
-  legendPlayer: '',
-  legendStart: '',
-  legendExit: '',
 };
 
 // Reaching the exit.

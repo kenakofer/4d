@@ -10,25 +10,6 @@
      slices side by side set their own width. */
   #mapPanel { width: auto; }
 
-  /* The maze's own furniture: a legend for what the rope is doing.
-
-     Unknot's rope is one strand and needs no key -- there is nothing to
-     confuse it with. A maze's rope forks, and the two things worth telling
-     apart are a junction (a choice) and a stub leaving the slice (a choice
-     you cannot see the far end of). Both are marked in the scene; this says
-     what the marks mean. */
-  .legend { display: grid; gap: 6px; margin-top: 10px; }
-  .legend div { display: flex; align-items: center; gap: 8px;
-                font-size: 12px; color: var(--dim); }
-  .swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
-  /* The way out of a slice is marked by an ARROW in the scene, not by a colour
-     -- it takes the colour of the cell it leaves, like every other passage. So
-     its key is the shape, drawn as a triangle rather than a dot. */
-  .swatch.arrow { border-radius: 0; background: none !important;
-                  width: 0; height: 0; margin: 0 1px;
-                  border-left: 5px solid transparent;
-                  border-right: 5px solid transparent;
-                  border-bottom: 10px solid var(--dim); }
 </style>
 </head>
 <body>
@@ -38,13 +19,6 @@
   <h1 id="title">—</h1>
   <p id="blurb"></p>
   <div id="status"></div>
-  <div class="legend">
-    <div><span class="swatch" id="swPlayer"></span><span id="legendPlayer"></span></div>
-    <div><span class="swatch" id="swStart"></span><span id="legendStart"></span></div>
-    <div><span class="swatch" id="swExit"></span><span id="legendExit"></span></div>
-    <div><span class="swatch" id="swJunction"></span><span id="legendJunction"></span></div>
-    <div><span class="swatch arrow" id="swW"></span><span id="legendW"></span></div>
-  </div>
   <div class="controls">
     <button id="reset"></button>
   </div>

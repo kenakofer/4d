@@ -44,7 +44,7 @@ import { armMask, sleeveFraction } from '../../shared/haloshape.js';
 import { Arrows, sizeFor } from '../../shared/warrow.js';
 import { cellMarks } from '../../shared/wallmark.js';
 import { key, step } from '../../shared/grid.js';
-import { HUD, FOURTH, WON, PANELS } from './copy.js';
+import { HUD, WON, PANELS } from './copy.js';
 
 let scene, camera, renderer, orbit, props, panels, pause, gamepads;
 let maze = null, dims = DEFAULTS.dims.slice();
@@ -184,17 +184,6 @@ function writeLabels() {
   document.getElementById('overScoreLabel').textContent = WON.yourSteps;
   document.getElementById('restartKey').textContent = WON.playAgainKey;
   document.getElementById('restartSub').textContent = WON.playAgain;
-  document.getElementById('legendJunction').textContent = FOURTH.legendJunction;
-  document.getElementById('legendW').textContent = FOURTH.legend;
-  document.getElementById('legendPlayer').textContent = FOURTH.legendPlayer;
-  document.getElementById('legendStart').textContent = FOURTH.legendStart;
-  document.getElementById('legendExit').textContent = FOURTH.legendExit;
-  // The swatches take their colour from the constants the scene is drawn with,
-  // so a colour changed there cannot leave the key behind describing the old one.
-  document.getElementById('swJunction').style.background = '#' + JUNCTION.getHexString();
-  document.getElementById('swPlayer').style.background = '#' + PLAYER.getHexString();
-  document.getElementById('swStart').style.background = '#' + START.getHexString();
-  document.getElementById('swExit').style.background = '#' + EXIT.getHexString();
 }
 
 function ring() {
