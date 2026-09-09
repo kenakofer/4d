@@ -16,9 +16,10 @@ That transfer is the point of keeping them in one repository rather than four.
 | [4D Unknot](unknot/) | Pull a knotted rope taut. One level cannot come undone in three dimensions — and does in four. | <https://kenan.schaefkofer.com/4d/unknot/> |
 | [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side, the fourth included. | <https://kenan.schaefkofer.com/4d/snake/> |
 | [4D Tron](tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d/tron/> |
+| [4D Maze](maze/) | Find the way out. Only the passages are drawn, so a corridor that stops short is a way into the next slice. | <https://kenan.schaefkofer.com/4d/maze/> |
 
-Each game is served from its own directory, so the URL is just the game's name:
-`kenan.schaefkofer.com/<n>d-<game>`. The root is an index linking to them all.
+Each game is served from its own directory, so the URL is just the game's name.
+The root is an index linking to them all.
 
 ## Running it locally
 
@@ -96,8 +97,8 @@ walls the camera can see into, which reads as a plan and two elevations. It is
 what makes a position inside a box legible without turning the box, and it is
 where you learn to read depth from rather than guessing at perspective.
 
-**The movement tutorial is shared.** A first-time visitor to any of the three
-games is sent to it before that game loads, and returned afterwards. It teaches
+**The movement tutorial is shared.** A first-time visitor to Unknot, Snake or
+Tron is sent to it before that game loads, and returned afterwards. It teaches
 the controls and the ring of rooms -- the fourth dimension, which is the idea
 all these games are built on -- using Snake's board, because the fourth
 dimension has to be *used* to be learned and Snake is the simplest game to use
@@ -137,27 +138,15 @@ game picks whichever pair it is worst at showing.
 
 ## Where the words are
 
-Everything the player reads lives in a copy module, never in a component or a
-template:
-
-```
-shared/copy.js             text that must read identically in every game
-shared/index-copy.js       the landing page
-<game>/src/copy.js         that game's own text
-```
-
-HTML carries the structure and copy carries the words, so neither repeats the
-other.
-
-The point is review. No AI-written sentence ships to a player unread: everything
-in these files is edited or approved by hand, and that is only possible while
-there is a short list of places to look. Text written anywhere else escapes
-that -- not through carelessness, but because new strings arrive faster than
-anyone would hunt them down.
+Everything the player reads lives in a copy module -- `shared/copy.js` for text
+every game shares, `shared/index-copy.js` for the landing page, and
+`<game>/src/copy.js` for a game's own -- never in a component or a template. The
+point is review: nothing an AI drafted ships to a player unread, and that is
+only possible while there is a short list of places to look.
 
 Unknot's level names and blurbs are the one exception, staying in `levels.js`
 beside the paths they describe -- a level is a name, a sentence and a shape
-together. See `CLAUDE.md` for the rule in full.
+together. `AGENTS.md` has the rule in full.
 
 ## Layout
 
@@ -190,6 +179,7 @@ shared/
 unknot/             rope-untangling puzzle
 snake/              snake in a 6x6x6x6 box
 tron/               two-player tron, on a clock
+maze/               a maze whose corridors leave the slice
 test/shared.js      tests for the shared engine
 ```
 
@@ -200,17 +190,8 @@ anywhere would quietly fix the dimension count and the family would stop being
 one family. Snake's own test suite runs its rules in 2, 3, 4 and 5 dimensions
 for exactly this reason.
 
-## Adding a game
+## Working on it
 
-1. `<name>/` at the repository root, with `index.html`, `src/`, `test/`. The
-   games here are all 4D, so the name says only what the game is; a 3D or 2D
-   version would be `3d-<name>/`.
-2. Link `../shared/style.css`; add only what is genuinely the game's own.
-3. Build the model as a pure module with no reference to three.js or the DOM, so
-   it runs under Node and its rules can be tested where bugs are cheap to find.
-4. Use `Ring`, `Slide`, `Orbit`, `rockAt`, `Pad`, `SliceMap` and the helpers in
-   `scene.js`
-   for anything the player has already learned elsewhere. If you find yourself
-   about to change one of them for one game's benefit, that is the signal to ask
-   whether the change belongs in every game.
-5. Add the tests to `package.json`'s `test` script and a card to `index.html`.
+`AGENTS.md` carries the conventions that are easy to break without noticing --
+where user-facing text goes, what may not import three.js, and what to check
+before calling a change done. It is worth reading before the first edit.
