@@ -17,6 +17,7 @@ That transfer is the point of keeping them in one repository rather than four.
 | [4D Snake](snake/) | Six cubes, six deep, three slabs of lava. Walls on every side, the fourth included. | <https://kenan.schaefkofer.com/4d/snake/> |
 | [4D Tron](tron/) | Two riders, one clock, permanent trails. The fourth direction is the lane you flee down when three dimensions run out. Two players. | <https://kenan.schaefkofer.com/4d/tron/> |
 | [4D Maze](maze/) | Find one correct path from start to finish in four dimensions. | <https://kenan.schaefkofer.com/4d/maze/> |
+| [50D Snake](50d-snake/) | Snake in a 5^50 box, seen only as 25 flat slices through the head. WASD picks the slice, the arrows move in it. | <https://kenan.schaefkofer.com/4d/50d-snake/> |
 
 Each game is served from its own directory, so the URL is just the game's name.
 The root is an index linking to them all.
@@ -180,6 +181,7 @@ unknot/             rope-untangling puzzle
 snake/              snake in a 6x6x6x6 box
 tron/               two-player tron, on a clock
 maze/               a maze whose corridors leave the slice
+50d-snake/          snake in a 5^50 box, drawn as 25 slices
 test/shared.js      tests for the shared engine
 ```
 

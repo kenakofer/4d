@@ -57,6 +57,12 @@ export const INDEX = {
       name: 'Maze', //kenan approved
       text: 'Find one correct path from start to finish in four dimensions.', //kenan approved
     },
+    {
+      href: './50d-snake/', //kenan approved
+      dim: '50 D', //kenan approved
+      name: 'Snake', //kenan approved
+      text: 'Fifty dimensional snake, wow!', //kenan approved
+    },
   ],
 
   notes: [

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>50D Snake</title>
+<link rel="stylesheet" href="../shared/style.css?v=22">
+<style>
+  /* The score readout, as 4D Snake has it. */
+  #stats { display: flex; gap: 18px; margin: 8px 0 2px; }
+  #stats div { display: flex; flex-direction: column; }
+  #stats .v { font-size: 19px; font-weight: 700; line-height: 1.15; }
+  #stats .k { font-size: 9.5px; color: var(--dim); letter-spacing: .1em;
+              text-transform: uppercase; }
+  #score { color: var(--accent); }
+
+  /* The percentage complete: thirty-odd zeros, so a line of its own in a
+     smaller face than the other numbers. */
+  #completeRow { margin: 6px 0 2px; display: flex; flex-direction: column; }
+  #complete { font: 600 11.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+              color: var(--ink); word-break: break-all; }
+  #completeLabel { font-size: 9.5px; color: var(--dim); letter-spacing: .1em;
+                   text-transform: uppercase; }
+
+  /* The twenty-five slices, five by five, laid out the way WASD walks between
+     them. Its size and place are set by fitSlices() in app.js -- as large as
+     fits in whatever the HUD and the pad leave free -- so these are only the
+     starting values. */
+  #slices {
+    top: 14px; left: 318px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+    width: 600px; padding: 8px;
+  }
+  .slice {
+    display: flex; flex-direction: column; align-items: center;
+    border: 1px solid var(--line); border-radius: 7px; padding: 2px 2px 3px;
+    background: #161c26; cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .slice svg { display: block; width: 100%; aspect-ratio: 1; }
+  .slice .cap { font-size: 9.5px; color: var(--dim); letter-spacing: .04em;
+                line-height: 1.2; white-space: nowrap; }
+  /* The slice the arrows move in. */
+  .slice.active { border-color: var(--accent);
+                  box-shadow: 0 0 0 1px var(--accent), 0 0 14px #4cc9f055; }
+  .slice.active .cap { color: var(--ink); }
+  /* The head is level with the apple on both of this slice's axes. */
+  .slice.aligned .cap { color: var(--good); }
+  .slice.aligned:not(.active) { border-color: #6ee7a866; }
+
+  /* Looking around: the grid takes the look colour, so the panels plainly
+     show somewhere other than where the snake is. */
+  #slices.looking { border-color: var(--ax3); border-style: dashed; }
+  #slices.looking .slice.active { border-color: var(--ax3);
+                                  box-shadow: 0 0 0 1px var(--ax3), 0 0 14px #c89bff55; }
+
+  /* The controls, bottom left under the HUD and the same width, so the two
+     make one column and the slices have the whole height beside it: WASD and
+     the arrows side by side as on a keyboard, Space as a bar beneath them. */
+  #hud { width: 330px; }
+  #padPanel { bottom: 14px; left: 14px; width: 330px;
+              display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+              padding: 10px 12px; }
+  #padPanel .padbtn .nm { white-space: nowrap; }
+  #spaceBtn { grid-column: 1 / -1; flex-direction: row; justify-content: center;
+              gap: 10px; padding: 8px 0; }
+  #spaceBtn .glyph { font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+  #spaceBtn .nm { font-size: 11px; }
+  /* While looking, the bar takes the look colour, so the mode is never
+     mistaken -- the snake is not moving. */
+  #spaceBtn.looking { border-color: var(--ax3); }
+  #spaceBtn.looking .glyph, #spaceBtn.looking .nm { color: var(--ax3); }
+
+  /* A screen too square to spare a column: the controls go under the slices,
+     bottom centre, the clusters wider apart. */
+  @media (max-aspect-ratio: 5/4) and (min-width: 621px) {
+    #padPanel { left: 50%; transform: translateX(-50%); width: 440px;
+                gap: 10px 30px; }
+  }
+
+  #restart { display: inline-flex; flex-direction: column; align-items: center;
+             gap: 2px; padding: 8px 22px; }
+  #restart .key { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+  #restart .sub { font-size: 10px; color: var(--dim); letter-spacing: .1em;
+                  text-transform: uppercase; }
+  #restart:hover .sub { color: var(--ink); }
+
+  @media (max-width: 620px) {
+    #stats { margin: 0 0 0 10px; gap: 12px; display: inline-flex;
+             vertical-align: baseline; }
+    #stats div { flex-direction: row; align-items: baseline; gap: 4px; }
+    #stats .v { font-size: 15px; }
+    #stats .k { font-size: 9px; }
+    #hud { top: 8px; bottom: auto; left: 8px; right: 52px; width: auto; }
+    #slices { gap: 3px; padding: 4px; }
+    .slice .cap { display: none; }
+    #padPanel { bottom: 8px; left: 8px; right: 8px; width: auto; transform: none; }
+    #spaceBtn .nm { display: inline; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="panel" id="hud">
+  <h1 id="title"></h1>
+  <p id="blurb"></p>
+
+  <div id="stats">
+    <div><span class="v" id="score">0</span><span class="k" id="scoreLabel"></span></div>
+    <div><span class="v" id="length">4</span><span class="k" id="lengthLabel"></span></div>
+    <div><span class="v" id="aligned">0</span><span class="k" id="alignedLabel"></span></div>
+  </div>
+  <div id="completeRow">
+    <span id="complete"></span><span id="completeLabel"></span>
+  </div>
+
+  <div class="padfoot">
+    <span><kbd>Esc</kbd> <span id="padFoot"></span></span>
+  </div>
+</div>
+
+<!-- Filled with one panel per slice by app.js. -->
+<div class="panel" id="slices"></div>
+
+<div class="panel" id="padPanel">
+  <div class="padcluster" id="padSelect"></div>
+  <div class="padcluster" id="padMove"></div>
+  <button class="padbtn" id="spaceBtn"><span class="glyph" id="spaceKey"></span><span class="nm" id="spaceName"></span></button>
+</div>
+
+<div id="over">
+  <div class="card">
+    <h2 id="overHeading"></h2>
+    <p class="cause" id="overCause"></p>
+    <div class="score" id="overScore">0</div>
+    <div class="scorelbl" id="overScoreLabel"></div>
+    <button id="restart"><span class="key" id="restartKey"></span><span class="sub" id="restartSub"></span></button>
+  </div>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

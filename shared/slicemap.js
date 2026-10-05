@@ -145,6 +145,12 @@ export class SliceMap {
     // that is long enough to press again and turn twice. The panel draws it as
     // a small arrow so the answer to "did that register" is on screen at once.
     this.pending = null;
+    // The player's own cell, when the slice is NOT taken through it -- a game
+    // that lets the player look around moves `focus` to wherever they are
+    // looking, and the thing they are steering then has to be drawn on its
+    // own. Drawn as the filled marker is, so it is the same object either way.
+    // Null, the usual case, means the player is at the focus.
+    this.lead = null;
   }
 
   // Is `p` in the slice this panel shows? Every axis except the two drawn has
@@ -541,6 +547,11 @@ export class SliceMap {
       this._appleHere = here;
     } else {
       this._appleMark = null;
+    }
+
+    // The player, when the slice is taken somewhere else. See `lead`.
+    if (this.lead && this.inSlice(this.lead)) {
+      rect(this.lead[H], this.lead[V], this.markerColour, 1, inset);
     }
 
     // --- where the player is ----------------------------------------------
